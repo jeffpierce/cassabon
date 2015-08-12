@@ -39,19 +39,23 @@ type CassabonConfig struct {
 
 // Get Rollup Settings
 func ParseConfig(configFile string) CassabonConfig {
+	// Load config file
 	yamlConfig, err := ioutil.Readfile(configFile)
 
 	if err != nil {
 		panic(err)
 	}
 
+	// Initialize config struct
 	var config CassabonConfig
 
+	// Unmarshal config file into config struct
 	err = yaml.Unmarshal(yamlConfig, &config)
 
 	if err != nil {
 		panic(err)
 	}
 
+	// Send back config struct
 	return config
 }
