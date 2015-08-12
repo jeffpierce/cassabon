@@ -22,3 +22,6 @@ _testmain.go
 *.exe
 *.test
 *.prof
+
+# Mac OSX cruft.
+*DS_Store
