@@ -33,6 +33,10 @@ type CassabonConfig struct {
 		Port     int    // Port for Carbon Receiver to listen on
 		Protocol string // "tcp", "udp" or "both" are acceptable
 	}
+	Statsd struct {
+		Host string // Host or IP address of statsd server
+		Port int    // Port that statsd server listens on
+	}
 	Rollups map[string][]string // Map of regex and default rollups
 }
 
