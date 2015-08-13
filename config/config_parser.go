@@ -16,7 +16,6 @@ type CassabonConfig struct {
 		}
 		Loglevel string // Level to log at.
 	}
-
 	Cassandra struct {
 		Hosts []string // List of hostnames or IP addresses of Cassandra ring
 		Port  int      // Cassandra port
@@ -34,13 +33,17 @@ type CassabonConfig struct {
 		Port     int    // Port for Carbon Receiver to listen on
 		Protocol string // "tcp", "udp" or "both" are acceptable
 	}
+	Statsd struct {
+		Host string // Host or IP address of statsd server
+		Port int    // Port that statsd server listens on
+	}
 	Rollups map[string][]string // Map of regex and default rollups
 }
 
 // Get Rollup Settings
 func ParseConfig(configFile string) CassabonConfig {
 	// Load config file
-	yamlConfig, err := ioutil.Readfile(configFile)
+	yamlConfig, err := ioutil.ReadFile(configFile)
 
 	if err != nil {
 		panic(err)
