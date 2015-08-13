@@ -15,10 +15,10 @@ api:
 elasticsearch:
     host: "127.0.0.1"
     port: 9200
-carbon:
-    address: "0.0.0.0"
-    port: 2003
-    protocol: "udp"
+#carbon:
+#    address: "0.0.0.0"
+#    port: 2003
+#    protocol: "udp"
 statsd:
     host: "localhost"
     port: 8125
