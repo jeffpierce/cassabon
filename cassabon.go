@@ -15,7 +15,6 @@ func main() {
 
 	// Variables populated from the command line.
 	var logDir, confFile string
-	var cnf CassabonConfig
 
 	// Get options provided on the command line.
 	flag.StringVar(&logDir, "logdir", "", "Name of directory to contain log files (stderr if unspecified)")
@@ -27,7 +26,7 @@ func main() {
 		cnf = config.ParseConfig(confFile)
 	}
 
-	if logDir == "" {
+	if logDir == "" && confFile != "" {
 		&logDir = cnf.Logging.Logdir
 	}
 
