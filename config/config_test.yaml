@@ -1,8 +1,5 @@
 logging:
-    logfiles:
-        api: "~/cassabon/api.log"
-        carbon: "~/cassabon/carbon.log"
-        system: "~/cassabon/system.log"
+    logdir: ""
     loglevel: "info"
 cassandra:
     hosts:

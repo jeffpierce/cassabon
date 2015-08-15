@@ -7,17 +7,28 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/jeffpierce/cassabon/config"
 	"github.com/jeffpierce/cassabon/logging"
 )
 
 func main() {
 
 	// Variables populated from the command line.
-	var logDir string
+	var logDir, confFile string
 
 	// Get options provided on the command line.
 	flag.StringVar(&logDir, "logdir", "", "Name of directory to contain log files (stderr if unspecified)")
+	flag.StringVar(&confFile, "conf", "", "Location of YAML configuration file.")
 	flag.Parse()
+
+	// Load config file if specified.
+	if confFile != "" {
+		cnf = config.ParseConfig(confFile)
+	}
+
+	if logDir == "" && confFile != "" {
+		&logDir = cnf.Logging.Logdir
+	}
 
 	// Set up reload and termination signal handlers.
 	var sighup = make(chan os.Signal, 1)
