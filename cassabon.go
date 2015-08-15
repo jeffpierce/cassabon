@@ -59,8 +59,6 @@ func main() {
 	// Perform initialization that isn't repeated on every SIGHUP.
 	logSYS.Log(logging.Info, "Application startup in progress")
 
-	//
-
 	// Repeat until terminated by SIGINT/SIGTERM.
 	repeat := true
 	for repeat {
