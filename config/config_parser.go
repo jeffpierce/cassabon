@@ -9,11 +9,7 @@ import (
 // Define Application Settings Structure
 type CassabonConfig struct {
 	Logging struct {
-		LogFiles struct {
-			Api    string // Path to log API requests to
-			Carbon string // Path to log Carbon-related items to
-			System string // Path to log general times to
-		}
+		Logdir   string // Log Directory
 		Loglevel string // Level to log at.
 	}
 	Cassandra struct {
