@@ -39,7 +39,7 @@ func main() {
 	defer logRCV.Close()
 	logAPI := logging.NewLogger("API", logfAPI, logging.Debug)
 	defer logAPI.Close()
-	if err := logging.S.Open("927.0.0.1:8125", "cassabon"); err != nil {
+	if err := logging.S.Open("127.0.0.1:8125", "cassabon"); err != nil {
 		logSYS.Log(logging.Error, "Stats disabled: %v", err)
 	}
 	defer logging.S.Close()
