@@ -3,7 +3,7 @@
 TARGET = cassabon
 
 run:
-	go run -race $(TARGET).go
+	go run -race $(TARGET).go $(ARGS)
 
 test:
 	go test -race -v ./...
