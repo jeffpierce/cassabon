@@ -10,8 +10,8 @@ api:
     address: "0.0.0.0"
     port: 8080
 elasticsearch:
-    host: "127.0.0.1"
-    port: 9200
+    url: "http://127.0.0.1:9200"
+    index: "cassabon"
 carbon:
     address: "0.0.0.0"
     port: 2003

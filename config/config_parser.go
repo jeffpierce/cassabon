@@ -20,9 +20,15 @@ type CassabonConfig struct {
 		Address string // HTTP API listens on this address
 		Port    int    // HTTP API listens on this port
 	}
-	ElasticSearch struct {
-		Host string // Hostname or IP address of ElasticSearch
-		Port int    // ElasticSearch port
+	RedisIndex struct {
+		Sentinel bool     // True if sentinel, false if standalone.
+		Addr     []string // List of addresses in host:port format
+		DB       int64    // Redis DB number for the index.
+	}
+	RedisQueue struct {
+		Sentinel bool     // True if sentinel, false if standalone.
+		Addr     []string // List of addresses in host:port format
+		DB       int64    // Redis DB number for the index.
 	}
 	Carbon struct {
 		Address  string // Address for Carbon Receiver to listen on
