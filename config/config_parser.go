@@ -24,11 +24,6 @@ type CassabonConfig struct {
 		Index RedisSettings // Settings for Redis Index
 		Queue RedisSettings // Settings for Redis Queue
 	}
-	RedisQueue struct {
-		Sentinel bool     // True if sentinel, false if standalone.
-		Addr     []string // List of addresses in host:port format
-		DB       int64    // Redis DB number for the index.
-	}
 	Carbon struct {
 		Address  string // Address for Carbon Receiver to listen on
 		Port     int    // Port for Carbon Receiver to listen on
