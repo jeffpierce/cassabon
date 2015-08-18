@@ -9,9 +9,17 @@ cassandra:
 api:
     address: "0.0.0.0"
     port: 8080
-elasticsearch:
-    url: "http://127.0.0.1:9200"
-    index: "cassabon"
+redis:
+    index:
+        sentinel: false
+        addr:
+            - "127.0.0.1:6379"
+        db: 0
+    queue:
+        sentinel: true
+        addr:
+            - "127.0.0.1:26379"
+        db: 1
 carbon:
     address: "0.0.0.0"
     port: 2003
