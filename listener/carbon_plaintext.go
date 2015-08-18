@@ -7,8 +7,10 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	// "github.com/jeffpierce/cassabon/logging"
+	"github.com/jeffpierce/cassabon/config"
 )
 
 // Define CarbonMetric struct
@@ -19,30 +21,36 @@ type CarbonMetric struct {
 }
 
 func CarbonTCP(addr string, port int) {
-	// Test if we should use TCP or UDP.
-	carbonTCPSocket, err := net.Listen("tcp", addr+":"+strconv.Itoa(port))
+
+	tcpaddr, err := net.ResolveTCPAddr("tcp4", addr+":"+strconv.Itoa(port))
+	tcpListener, err := net.ListenTCP("tcp4", tcpaddr)
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
 		// TODO: Convert to our own logger, add a stat.
 		panic(err)
 	}
-
-	defer carbonTCPSocket.Close()
+	defer tcpListener.Close()
 
 	// TODO:  Convert to our own logger.
 	fmt.Printf("Carbon TCP plaintext listener now listening on %s:%d\n", addr, port)
 
 	// Start listener and pass incoming connections to handler.
-ListenerLoop:
 	for {
-		conn, err := carbonTCPSocket.Accept()
-		if err != nil {
-			// TODO: Log inability to handle connection.
-			continue ListenerLoop
+		select {
+		case <-config.G.Quit:
+			fmt.Printf("CarbonTCP received QUIT message\n")
+			config.G.WG.Done()
+			return
+		default:
+			tcpListener.SetDeadline(time.Now().Add(5 * time.Second))
+			if conn, err := tcpListener.Accept(); err == nil {
+				// Pass to handler to place metrics in queue.
+				go MetricHandler(conn)
+			} else {
+				// TODO: Log inability to handle connection.
+				fmt.Printf("Accept error: %v\n", err)
+			}
 		}
-
-		// Pass to handler to place metrics in queue.
-		go MetricHandler(conn)
 	}
 }
 
