@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -60,6 +61,27 @@ func severityToText(sev Severity) string {
 	return s
 }
 
+// TextToSeverity derives a Severity from a text string, ignoring case.
+func TextToSeverity(s string) (Severity, error) {
+	var sev Severity = Debug
+	var err error
+	switch strings.ToLower(s) {
+	case "debug":
+		sev = Debug
+	case "info":
+		sev = Info
+	case "warn":
+		sev = Warn
+	case "error":
+		sev = Error
+	case "fatal":
+		sev = Fatal
+	default:
+		err = fmt.Errorf(`"%s" is not a valid logging level; using DEBUG`, s)
+	}
+	return sev, err
+}
+
 // The FileLogger object.
 type FileLogger struct {
 	m           sync.RWMutex // Serialize access to logger during log rotation
@@ -74,7 +96,7 @@ type FileLogger struct {
 // SetLogLevel updates the logging level threshold with imediate effect.
 func (l *FileLogger) SetLogLevel(logLevel Severity) {
 	l.logLevel = logLevel
-	l.Log(Info, "Log level set to %s", severityToText(logLevel))
+	l.LogInfo("Log level set to %s", severityToText(logLevel))
 }
 
 // Close releases all resources associated with the logger.
@@ -89,13 +111,53 @@ func (l *FileLogger) Close() {
 	l.opened = false
 }
 
-// Log writes a time-stamped message to the log file, with a mutex guard.
-func (l *FileLogger) Log(sev Severity, format string, a ...interface{}) {
+// LogDebug writes a time-stamped Debug message to the log file, with a mutex guard.
+func (l *FileLogger) LogDebug(format string, a ...interface{}) {
 
 	if l.opened {
 		l.m.RLock()
 		defer l.m.RUnlock()
-		l.emit(sev, format, a...)
+		l.emit(Debug, format, a...)
+	}
+}
+
+// LogInfo writes a time-stamped Info message to the log file, with a mutex guard.
+func (l *FileLogger) LogInfo(format string, a ...interface{}) {
+
+	if l.opened {
+		l.m.RLock()
+		defer l.m.RUnlock()
+		l.emit(Info, format, a...)
+	}
+}
+
+// LogWarn writes a time-stamped Warn message to the log file, with a mutex guard.
+func (l *FileLogger) LogWarn(format string, a ...interface{}) {
+
+	if l.opened {
+		l.m.RLock()
+		defer l.m.RUnlock()
+		l.emit(Warn, format, a...)
+	}
+}
+
+// LogError writes a time-stamped Error message to the log file, with a mutex guard.
+func (l *FileLogger) LogError(format string, a ...interface{}) {
+
+	if l.opened {
+		l.m.RLock()
+		defer l.m.RUnlock()
+		l.emit(Error, format, a...)
+	}
+}
+
+// LogFatal writes a time-stamped Fatal message to the log file, with a mutex guard.
+func (l *FileLogger) LogFatal(format string, a ...interface{}) {
+
+	if l.opened {
+		l.m.RLock()
+		defer l.m.RUnlock()
+		l.emit(Fatal, format, a...)
 	}
 }
 
@@ -140,7 +202,7 @@ func (l *FileLogger) openLogfile() *os.File {
 		} else {
 			// The startup case.
 			// Warning: when started as a daemon, this may go to /dev/null.
-			fmt.Printf("["+severityText[Fatal]+"] Unable to open logfile '%v'. Error: '%v'\n", l.logFilename, err)
+			fmt.Printf("[-] ["+severityText[Fatal]+"] Unable to open logfile '%v'. Error: '%v'\n", l.logFilename, err)
 		}
 		// Inability to log is a fatal error; die with a non-zero exit code.
 		// We do not run blind.
@@ -193,5 +255,5 @@ func (l *FileLogger) emit(sev Severity, format string, a ...interface{}) {
 		return
 	}
 
-	l.logger.Printf("["+l.logFacility+"]["+severityToText(sev)+"] "+format, a...)
+	l.logger.Printf("["+l.logFacility+"] ["+severityToText(sev)+"] "+format, a...)
 }

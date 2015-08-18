@@ -14,20 +14,22 @@ import (
 func main() {
 
 	// Variables populated from the command line.
-	var logDir, confFile string
+	var confFile, logDir, logLevel string
 
 	// Get options provided on the command line.
-	flag.StringVar(&logDir, "logdir", "", "Name of directory to contain log files (stderr if unspecified)")
 	flag.StringVar(&confFile, "conf", "", "Location of YAML configuration file.")
+	flag.StringVar(&logDir, "logdir", "", "Name of directory to contain log files (stderr if unspecified)")
+	flag.StringVar(&logLevel, "loglevel", "debug", "Log level: debug|info|warn|error|fatal")
 	flag.Parse()
 
-	// Load config file if specified.
+	// Load configuration file if specified.
+	var cnf config.CassabonConfig
 	if confFile != "" {
 		cnf = config.ParseConfig(confFile)
 	}
 
 	if logDir == "" && confFile != "" {
-		&logDir = cnf.Logging.Logdir
+		logDir = cnf.Logging.Logdir
 	}
 
 	// Set up reload and termination signal handlers.
@@ -40,43 +42,47 @@ func main() {
 	var logfSYS, logfRCV, logfAPI string
 	if logDir != "" {
 		logDir, _ = filepath.Abs(logDir)
-		logfSYS = filepath.Join(logDir, "cassabon.sys.log")
-		logfRCV = filepath.Join(logDir, "cassabon.rcv.log")
+		logfSYS = filepath.Join(logDir, "cassabon.system.log")
+		logfRCV = filepath.Join(logDir, "cassabon.carbon.log")
 		logfAPI = filepath.Join(logDir, "cassabon.api.log")
 	}
-	logSYS := logging.NewLogger("SYS", logfSYS, logging.Debug)
+	sev, errLogLevel := logging.TextToSeverity(logLevel)
+	logSYS := logging.NewLogger("system", logfSYS, sev)
 	defer logSYS.Close()
-	logRCV := logging.NewLogger("RCV", logfRCV, logging.Debug)
+	logRCV := logging.NewLogger("carbon", logfRCV, sev)
 	defer logRCV.Close()
-	logAPI := logging.NewLogger("API", logfAPI, logging.Debug)
+	logAPI := logging.NewLogger("api", logfAPI, sev)
 	defer logAPI.Close()
 	if err := logging.S.Open("127.0.0.1:8125", "cassabon"); err != nil {
-		logSYS.Log(logging.Error, "Stats disabled: %v", err)
+		logSYS.LogError("Stats disabled: %v", err)
 	}
 	defer logging.S.Close()
 
 	// Perform initialization that isn't repeated on every SIGHUP.
-	logSYS.Log(logging.Info, "Application startup in progress")
+	logSYS.LogInfo("Application startup in progress")
+	if errLogLevel != nil {
+		logSYS.LogWarn("Bad command line argument: %v", errLogLevel)
+	}
 
 	// Repeat until terminated by SIGINT/SIGTERM.
 	repeat := true
 	for repeat {
 
 		// Perform initialization that is repeated on every SIGHUP.
-		logSYS.Log(logging.Info, "Application reading and applying current configuration")
+		logSYS.LogInfo("Application reading and applying current configuration")
 
 		// Wait for receipt of a recognized signal.
-		logSYS.Log(logging.Info, "Application running")
+		logSYS.LogInfo("Application running")
 		select {
 		case <-sighup:
-			logSYS.Log(logging.Info, "Application received SIGHUP")
+			logSYS.LogInfo("Application received SIGHUP")
 			logging.Reopen()
 		case <-sigterm:
-			logSYS.Log(logging.Info, "Application received SIGINT/SIGTERM, preparing to terminate")
+			logSYS.LogInfo("Application received SIGINT/SIGTERM, preparing to terminate")
 			repeat = false
 		}
 	}
 
 	// Final cleanup.
-	logSYS.Log(logging.Info, "Application termination complete")
+	logSYS.LogInfo("Application termination complete")
 }
