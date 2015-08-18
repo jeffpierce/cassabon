@@ -6,7 +6,7 @@ import "gopkg.in/redis.v3"
 // RedisClient is used to initialize a connection to a stand-alone Redis server
 // that is not clustered or in a Sentinel pool. Returns the working Redis client
 // if good, otherwise, it returns nil.
-func RedisClient(raddr, rpwd str, rdb int) *redis.Client {
+func RedisClient(raddr, rpwd str, rdb int64) *redis.Client {
 	// Initialize Redis client.  redis.NewClient returns a pointer.
 	rclient := redis.NewClient(&redis.Options{
 		Addr:     raddr,
@@ -22,7 +22,7 @@ func RedisClient(raddr, rpwd str, rdb int) *redis.Client {
 
 // RedisFailoverClient is used to initialize a connection to a Redis server pool
 // managed by Redis Sentinel.
-func RedisFailoverClient(raddr []string, rpwd, master string, rdb int) *redis.Client {
+func RedisFailoverClient(raddr []string, rpwd, master string, rdb int64) *redis.Client {
 	// Initialize Redis connection via Redis Sentinels
 	rclient := redis.NewFailoverClient(&redis.FailoverOptions{
 		MasterName:    master,
