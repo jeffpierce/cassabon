@@ -3,7 +3,6 @@ package listener
 
 import (
 	"bufio"
-	"fmt"
 	"net"
 	"os"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jeffpierce/cassabon/config"
+	"github.com/jeffpierce/cassabon/logging"
 )
 
 // CarbonMetric is the canonical representation of Carbon data.
@@ -72,46 +72,49 @@ func CarbonTCP(addr string, port string) {
 	}
 } */
 
+// metricHandler reads, parses, and sends on a Carbon data packet.
 func metricHandler(conn net.Conn) {
-	// Carbon metrics are terminated by newlines.  Listed for it.
-	metric, err := bufio.NewReader(conn).ReadString('\n')
+
+	// Carbon metrics are terminated by newlines. Read one line, and close the connection.
+	defer conn.Close()
+	line, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
-		// TODO:  Handle with actual logger/stats.
-		fmt.Println("Received this error:", err.Error())
-		metric = ""
+		// Log this as a Warn, because it's the client's error, not ours.
+		config.G.Log.Carbon.LogWarn("Unreadable metric \"%s\": %v", line, err)
+		logging.Statsd.Client.Inc("cassabon.carbon.received.failure", 1, 1.0)
+		return
 	}
 
-	// Close connection.
-	conn.Close()
-
-	// Examine metric to ensure that it's a valid carbon metric
-	for len(metric) != 0 {
-		splitMetric := strings.Fields(metric)
-		if len(splitMetric) != 3 {
-			// TODO:  Handle with actual logger/stats.
-			fmt.Println("Bad metric:", metric)
-			metric = ""
-		}
-
-		statPath := splitMetric[0]
-		val, err := strconv.ParseFloat(splitMetric[1], 64)
-		if err != nil {
-			// TODO:  Handle with actual logger/stats.
-			fmt.Printf("Cannot convert value %s to float.\n", splitMetric[1])
-			break
-		}
-		ts, err := strconv.ParseFloat(splitMetric[2], 64)
-		if err != nil {
-			// TODO:  Handle with actual logger/stats.
-			fmt.Printf("Cannot convert timestamp %s to float.\n", splitMetric[2])
-			break
-		}
-
-		parsedMetric := CarbonMetric{statPath, val, ts}
-
-		// Metric parsed, place in queue, handoff to receiving worker.
-		// TODO:  Implement receiving worker
-		fmt.Printf("Would queue parsed metric: %+v\n", parsedMetric)
-		break
+	// Examine metric to ensure that it's a valid carbon metric triplet.
+	splitMetric := strings.Fields(line)
+	if len(splitMetric) != 3 {
+		// Log this as a Warn, because it's the client's error, not ours.
+		config.G.Log.Carbon.LogWarn("Malformed metric, expected 3 fields, found %d: \"%s\"", len(splitMetric), line)
+		logging.Statsd.Client.Inc("cassabon.carbon.received.failure", 1, 1.0)
+		return
 	}
+
+	// Pull out the first field from the triplet.
+	statPath := splitMetric[0]
+
+	// Pull out and validate the second field from the triplet.
+	val, err := strconv.ParseFloat(splitMetric[1], 64)
+	if err != nil {
+		config.G.Log.Carbon.LogWarn("Malformed metric, cannnot parse value as float: \"%s\"", splitMetric[1])
+		logging.Statsd.Client.Inc("cassabon.carbon.received.failure", 1, 1.0)
+		return
+	}
+
+	// Pull out and validate the third field from the triplet.
+	ts, err := strconv.ParseFloat(splitMetric[2], 64)
+	if err != nil {
+		config.G.Log.Carbon.LogWarn("Malformed metric, cannnot parse timestamp as float: \"%s\"", splitMetric[2])
+		logging.Statsd.Client.Inc("cassabon.carbon.received.failure", 1, 1.0)
+		return
+	}
+
+	// Assemble into canonical struct and send to enqueueing worker.
+	parsedMetric := CarbonMetric{statPath, val, ts}
+	config.G.Log.Carbon.LogDebug("Woohoo! Pushing metric into channel: %v", parsedMetric)
+	logging.Statsd.Client.Inc("cassabon.carbon.received.success", 1, 1.0)
 }
