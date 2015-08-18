@@ -33,8 +33,8 @@ type Globals struct {
 		Port  string   // Cassandra port
 	}
 	Redis struct {
-		Host string // Hostname or IP address of Redis
-		Port string // Redis port
+		Index RedisSettings // Settings for Redis Index
+		Queue RedisSettings // Settings for Redis Queue
 	}
 
 	// Configuration of the services offered to clients.
