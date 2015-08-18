@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -11,25 +12,76 @@ import (
 	"github.com/jeffpierce/cassabon/logging"
 )
 
+func fetchConfiguration(confFile string) {
+
+	// Open, read, and parse the YAML.
+	cnf := config.ParseConfig(confFile)
+
+	// Fill in arguments not provided on the command line.
+	if config.G.Log.Logdir == "" {
+		config.G.Log.Logdir = cnf.Logging.Logdir
+	}
+	if config.G.Log.Loglevel == "" {
+		config.G.Log.Loglevel = cnf.Logging.Loglevel
+	}
+	if config.G.Statsd.Host == "" {
+		config.G.Statsd.Host = cnf.Statsd.Host
+	}
+
+	// Copy in values sourced solely from the configuration file.
+}
+
 func main() {
 
-	// Variables populated from the command line.
-	var confFile, logDir, logLevel string
+	// The name of the YAML configuration file.
+	var confFile string
 
 	// Get options provided on the command line.
 	flag.StringVar(&confFile, "conf", "", "Location of YAML configuration file.")
-	flag.StringVar(&logDir, "logdir", "", "Name of directory to contain log files (stderr if unspecified)")
-	flag.StringVar(&logLevel, "loglevel", "debug", "Log level: debug|info|warn|error|fatal")
+	flag.StringVar(&config.G.Log.Logdir, "logdir", "", "Name of directory to contain log files (stderr if unspecified)")
+	flag.StringVar(&config.G.Log.Loglevel, "loglevel", "debug", "Log level: debug|info|warn|error|fatal")
+	flag.StringVar(&config.G.Statsd.Host, "statsdhost", "", "statsd host or IP address")
+	flag.IntVar(&config.G.Statsd.Port, "statsdport", 8125, "statsd port")
 	flag.Parse()
 
-	// Load configuration file if specified.
-	var cnf config.CassabonConfig
+	// Fill in startup values not provided on the command line, if available.
 	if confFile != "" {
-		cnf = config.ParseConfig(confFile)
+		fetchConfiguration(confFile)
 	}
 
-	if logDir == "" && confFile != "" {
-		logDir = cnf.Logging.Logdir
+	// Set up logging.
+	sev, errLogLevel := logging.TextToSeverity(config.G.Log.Loglevel)
+	if config.G.Log.Logdir != "" {
+		logDir, _ := filepath.Abs(config.G.Log.Logdir)
+		config.G.Log.System = logging.NewLogger("system", filepath.Join(logDir, "cassabon.system.log"), sev)
+		config.G.Log.Carbon = logging.NewLogger("carbon", filepath.Join(logDir, "cassabon.carbon.log"), sev)
+		config.G.Log.API = logging.NewLogger("api", filepath.Join(logDir, "cassabon.api.log"), sev)
+	} else {
+		config.G.Log.System = logging.NewLogger("system", "", sev)
+		config.G.Log.Carbon = logging.NewLogger("carbon", "", sev)
+		config.G.Log.API = logging.NewLogger("api", "", sev)
+	}
+	defer config.G.Log.System.Close()
+	defer config.G.Log.Carbon.Close()
+	defer config.G.Log.API.Close()
+
+	// Announce the application startup in the logs.
+	config.G.Log.System.LogInfo("Application startup in progress")
+	if errLogLevel != nil {
+		config.G.Log.System.LogWarn("Bad command line argument: %v", errLogLevel)
+	}
+
+	// Set up stats reporting.
+	if config.G.Statsd.Host != "" {
+		hp := fmt.Sprintf("%s:%d", config.G.Statsd.Host, config.G.Statsd.Port)
+		if err := logging.S.Open(hp, "cassabon"); err != nil {
+			config.G.Log.System.LogError("Not reporting to statsd: %v", err)
+		} else {
+			config.G.Log.System.LogInfo("Reporting to statsd at %s", hp)
+		}
+		defer logging.S.Close()
+	} else {
+		config.G.Log.System.LogInfo("Not reporting to statsd: specify host or IP to enable")
 	}
 
 	// Set up reload and termination signal handlers.
@@ -38,51 +90,30 @@ func main() {
 	var sigterm = make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
 
-	// Set up logging and stats reporting.
-	var logfSYS, logfRCV, logfAPI string
-	if logDir != "" {
-		logDir, _ = filepath.Abs(logDir)
-		logfSYS = filepath.Join(logDir, "cassabon.system.log")
-		logfRCV = filepath.Join(logDir, "cassabon.carbon.log")
-		logfAPI = filepath.Join(logDir, "cassabon.api.log")
-	}
-	sev, errLogLevel := logging.TextToSeverity(logLevel)
-	logSYS := logging.NewLogger("system", logfSYS, sev)
-	defer logSYS.Close()
-	logRCV := logging.NewLogger("carbon", logfRCV, sev)
-	defer logRCV.Close()
-	logAPI := logging.NewLogger("api", logfAPI, sev)
-	defer logAPI.Close()
-	if err := logging.S.Open("127.0.0.1:8125", "cassabon"); err != nil {
-		logSYS.LogError("Stats disabled: %v", err)
-	}
-	defer logging.S.Close()
-
-	// Perform initialization that isn't repeated on every SIGHUP.
-	logSYS.LogInfo("Application startup in progress")
-	if errLogLevel != nil {
-		logSYS.LogWarn("Bad command line argument: %v", errLogLevel)
-	}
-
 	// Repeat until terminated by SIGINT/SIGTERM.
+	configIsStale := false
 	repeat := true
 	for repeat {
 
 		// Perform initialization that is repeated on every SIGHUP.
-		logSYS.LogInfo("Application reading and applying current configuration")
+		config.G.Log.System.LogInfo("Application reading and applying current configuration")
+		if configIsStale && confFile != "" {
+			fetchConfiguration(confFile)
+		}
 
 		// Wait for receipt of a recognized signal.
-		logSYS.LogInfo("Application running")
+		config.G.Log.System.LogInfo("Application running")
 		select {
 		case <-sighup:
-			logSYS.LogInfo("Application received SIGHUP")
+			config.G.Log.System.LogInfo("Application received SIGHUP")
 			logging.Reopen()
+			configIsStale = true
 		case <-sigterm:
-			logSYS.LogInfo("Application received SIGINT/SIGTERM, preparing to terminate")
+			config.G.Log.System.LogInfo("Application received SIGINT/SIGTERM, preparing to terminate")
 			repeat = false
 		}
 	}
 
 	// Final cleanup.
-	logSYS.LogInfo("Application termination complete")
+	config.G.Log.System.LogInfo("Application termination complete")
 }
