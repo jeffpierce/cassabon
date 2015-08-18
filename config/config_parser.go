@@ -18,7 +18,7 @@ type CassabonConfig struct {
 	}
 	Api struct {
 		Address string // HTTP API listens on this address
-		Port    int    // HTTP API listens on this port
+		Port    string // HTTP API listens on this port
 	}
 	Redis struct {
 		Index RedisSettings // Settings for Redis Index
@@ -26,12 +26,12 @@ type CassabonConfig struct {
 	}
 	Carbon struct {
 		Address  string // Address for Carbon Receiver to listen on
-		Port     int    // Port for Carbon Receiver to listen on
+		Port     string // Port for Carbon Receiver to listen on
 		Protocol string // "tcp", "udp" or "both" are acceptable
 	}
 	Statsd struct {
 		Host string // Host or IP address of statsd server
-		Port int    // Port that statsd server listens on
+		Port string // Port that statsd server listens on
 	}
 	Rollups map[string][]string // Map of regex and default rollups
 }

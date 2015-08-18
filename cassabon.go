@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -42,7 +41,7 @@ func main() {
 	flag.StringVar(&config.G.Log.Logdir, "logdir", "", "Name of directory to contain log files (stderr if unspecified)")
 	flag.StringVar(&config.G.Log.Loglevel, "loglevel", "debug", "Log level: debug|info|warn|error|fatal")
 	flag.StringVar(&config.G.Statsd.Host, "statsdhost", "", "statsd host or IP address")
-	flag.IntVar(&config.G.Statsd.Port, "statsdport", 8125, "statsd port")
+	flag.StringVar(&config.G.Statsd.Port, "statsdport", "8125", "statsd port")
 	flag.Parse()
 
 	// Fill in startup values not provided on the command line, if available.
@@ -74,13 +73,12 @@ func main() {
 
 	// Set up stats reporting.
 	if config.G.Statsd.Host != "" {
-		hp := fmt.Sprintf("%s:%d", config.G.Statsd.Host, config.G.Statsd.Port)
-		if err := logging.S.Open(hp, "cassabon"); err != nil {
+		if err := logging.Statsd.Open(config.G.Statsd.Host, config.G.Statsd.Port, "cassabon"); err != nil {
 			config.G.Log.System.LogError("Not reporting to statsd: %v", err)
 		} else {
-			config.G.Log.System.LogInfo("Reporting to statsd at %s", hp)
+			config.G.Log.System.LogInfo("Reporting to statsd at %s:%s", config.G.Statsd.Host, config.G.Statsd.Port)
 		}
-		defer logging.S.Close()
+		defer logging.Statsd.Close()
 	} else {
 		config.G.Log.System.LogInfo("Not reporting to statsd: specify host or IP to enable")
 	}
