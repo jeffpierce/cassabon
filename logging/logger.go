@@ -66,6 +66,8 @@ func TextToSeverity(s string) (Severity, error) {
 	var sev Severity = Debug
 	var err error
 	switch strings.ToLower(s) {
+	case "":
+		sev = Debug
 	case "debug":
 		sev = Debug
 	case "info":

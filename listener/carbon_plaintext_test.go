@@ -5,9 +5,15 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/jeffpierce/cassabon/config"
+	"github.com/jeffpierce/cassabon/logging"
 )
 
 func TestCarbonSocket(t *testing.T) {
+
+	config.G.Log.System = logging.NewLogger("system", "", logging.Fatal)
+
 	fmt.Println("Testing TCP socket connection...")
 	go CarbonTCP("127.0.0.1", "2003")
 

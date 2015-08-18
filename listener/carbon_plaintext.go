@@ -5,50 +5,49 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	// "github.com/jeffpierce/cassabon/logging"
 	"github.com/jeffpierce/cassabon/config"
 )
 
-// Define CarbonMetric struct
+// CarbonMetric is the canonical representation of Carbon data.
 type CarbonMetric struct {
 	Path      string  // Metric path
 	Value     float64 // Metric Value
 	Timestamp float64 // Epoch timestamp
 }
 
+// CarbonTCP listens for incoming Carbon TCP traffic and dispatches it.
 func CarbonTCP(addr string, port string) {
 
-	tcpaddr, err := net.ResolveTCPAddr("tcp4", net.JoinHostPort(addr, port))
+	// Resolve the address:port, and start listening for TCP connections.
+	tcpaddr, _ := net.ResolveTCPAddr("tcp4", net.JoinHostPort(addr, port))
 	tcpListener, err := net.ListenTCP("tcp4", tcpaddr)
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
-		// TODO: Convert to our own logger, add a stat.
-		panic(err)
+		config.G.Log.System.LogFatal("Cannot listen for Carbon on TCP address %s: %v", tcpListener.Addr().String(), err)
+		os.Exit(3)
 	}
 	defer tcpListener.Close()
-
-	// TODO:  Convert to our own logger.
-	fmt.Printf("Carbon TCP plaintext listener now listening on %s:%s\n", addr, port)
+	config.G.Log.System.LogInfo("Listening on %s TCP for Carbon plaintext protocol", tcpListener.Addr().String())
 
 	// Start listener and pass incoming connections to handler.
 	for {
 		select {
 		case <-config.G.Quit:
-			fmt.Printf("CarbonTCP received QUIT message\n")
+			config.G.Log.System.LogInfo("CarbonTCP received QUIT message")
 			config.G.WG.Done()
 			return
 		default:
+			// On receipt of a connection, spawn a goroutine to handle it.
 			tcpListener.SetDeadline(time.Now().Add(5 * time.Second))
 			if conn, err := tcpListener.Accept(); err == nil {
-				// Pass to handler to place metrics in queue.
-				go MetricHandler(conn)
+				go metricHandler(conn)
 			} else {
-				// TODO: Log inability to handle connection.
-				fmt.Printf("Accept error: %v\n", err)
+				config.G.Log.System.LogDebug("CarbonTCP Accept() timed out")
 			}
 		}
 	}
@@ -69,11 +68,11 @@ func CarbonTCP(addr string, port string) {
 	fmt.Printf("Carbon UDP plaintext listener now listening on %s:%d\n", addr, port)
 
 	for {
-		go MetricHandler(carbonUDPSocket)
+		go metricHandler(carbonUDPSocket)
 	}
 } */
 
-func MetricHandler(conn net.Conn) {
+func metricHandler(conn net.Conn) {
 	// Carbon metrics are terminated by newlines.  Listed for it.
 	metric, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {

@@ -16,7 +16,7 @@ type CassabonConfig struct {
 		Hosts []string // List of hostnames or IP addresses of Cassandra ring
 		Port  int      // Cassandra port
 	}
-	Api struct {
+	API struct {
 		Address string // HTTP API listens on this address
 		Port    string // HTTP API listens on this port
 	}
