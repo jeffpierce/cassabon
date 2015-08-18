@@ -4,7 +4,7 @@ package middleware
 import "github.com/gocql/gocql"
 
 // Returns a round-robin simple connection pool to the Cassandra cluster.
-func CassandraSession(chost string, cport int, ckeyspace string) *gocql.Session {
+func CassandraSession(chosts []string, cport int, ckeyspace string) *gocql.Session {
 	// Retrieve cluster configuration.
 	cass := gocql.NewCluster(chost)
 
@@ -22,5 +22,5 @@ func CassandraSession(chost string, cport int, ckeyspace string) *gocql.Session 
 	defer csession.Close()
 
 	// And return the session.
-	return &csession()
+	return csession
 }
