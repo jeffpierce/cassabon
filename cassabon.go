@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/jeffpierce/cassabon/config"
+	"github.com/jeffpierce/cassabon/listener"
 	"github.com/jeffpierce/cassabon/logging"
 )
 
@@ -97,19 +98,31 @@ func main() {
 
 		// Perform initialization that is repeated on every SIGHUP.
 		config.G.Log.System.LogInfo("Application reading and applying current configuration")
+		config.G.Quit = make(chan struct{}, 1)
+
+		// Re-read the configuration to get any updated values.
 		if configIsStale && confFile != "" {
 			fetchConfiguration(confFile)
 		}
+
+		// Start the services we offer.
+		go listener.CarbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
+
+		// Note how many goroutines we started and must wait for on SIGHUP.
+		config.G.WG.Add(1)
 
 		// Wait for receipt of a recognized signal.
 		config.G.Log.System.LogInfo("Application running")
 		select {
 		case <-sighup:
 			config.G.Log.System.LogInfo("Application received SIGHUP")
-			logging.Reopen()
 			configIsStale = true
+			close(config.G.Quit) // Notify all goroutines to exit
+			config.G.WG.Wait()   // Wait for them to exit
+			logging.Reopen()
 		case <-sigterm:
 			config.G.Log.System.LogInfo("Application received SIGINT/SIGTERM, preparing to terminate")
+			close(config.G.Quit) // Notify all goroutines to exit - do NOT wait
 			repeat = false
 		}
 	}

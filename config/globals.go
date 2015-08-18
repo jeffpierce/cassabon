@@ -1,6 +1,8 @@
 package config
 
 import (
+	"sync"
+
 	"github.com/jeffpierce/cassabon/logging"
 )
 
@@ -9,6 +11,10 @@ var G Globals
 
 // Define Application Settings Structure
 type Globals struct {
+
+	// Goroutine management.
+	Quit chan struct{}
+	WG   sync.WaitGroup
 
 	// Integration into local filesystem and remote services.
 	Log struct {
