@@ -9,7 +9,7 @@ import (
 
 func TestCarbonSocket(t *testing.T) {
 	fmt.Println("Testing TCP socket connection...")
-	go CarbonTCP("127.0.0.1", 2003)
+	go CarbonTCP("127.0.0.1", "2003")
 
 	//	fmt.Println("Testing UDP socket connection...")
 	//	go CarbonUDP("127.0.0.1", 2003)

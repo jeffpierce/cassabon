@@ -20,9 +20,9 @@ type CarbonMetric struct {
 	Timestamp float64 // Epoch timestamp
 }
 
-func CarbonTCP(addr string, port int) {
+func CarbonTCP(addr string, port string) {
 
-	tcpaddr, err := net.ResolveTCPAddr("tcp4", addr+":"+strconv.Itoa(port))
+	tcpaddr, err := net.ResolveTCPAddr("tcp4", net.JoinHostPort(addr, port))
 	tcpListener, err := net.ListenTCP("tcp4", tcpaddr)
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
@@ -32,7 +32,7 @@ func CarbonTCP(addr string, port int) {
 	defer tcpListener.Close()
 
 	// TODO:  Convert to our own logger.
-	fmt.Printf("Carbon TCP plaintext listener now listening on %s:%d\n", addr, port)
+	fmt.Printf("Carbon TCP plaintext listener now listening on %s:%s\n", addr, port)
 
 	// Start listener and pass incoming connections to handler.
 	for {

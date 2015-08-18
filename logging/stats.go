@@ -2,6 +2,7 @@ package logging
 
 import (
 	"errors"
+	"net"
 	"runtime"
 	"time"
 
@@ -9,7 +10,7 @@ import (
 )
 
 // The stats writer singleton.
-var S StatsWriter
+var Statsd StatsWriter
 
 // The StatsWriter object.
 type StatsWriter struct {
@@ -20,7 +21,7 @@ type StatsWriter struct {
 }
 
 // Open allocates resources for the stats writer.
-func (s *StatsWriter) Open(addr string, prefix string) error {
+func (s *StatsWriter) Open(host string, port string, prefix string) error {
 
 	var err error
 
@@ -29,6 +30,7 @@ func (s *StatsWriter) Open(addr string, prefix string) error {
 	}
 	s.isOpen = true
 
+	addr := net.JoinHostPort(host, port)
 	s.Client, err = statsd.NewClient(addr, prefix)
 	if err != nil {
 		// Use the no-op client so we don't need to test everywhere.
