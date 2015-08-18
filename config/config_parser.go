@@ -20,10 +20,9 @@ type CassabonConfig struct {
 		Address string // HTTP API listens on this address
 		Port    int    // HTTP API listens on this port
 	}
-	RedisIndex struct {
-		Sentinel bool     // True if sentinel, false if standalone.
-		Addr     []string // List of addresses in host:port format
-		DB       int64    // Redis DB number for the index.
+	Redis struct {
+		Index RedisSettings // Settings for Redis Index
+		Queue RedisSettings // Settings for Redis Queue
 	}
 	RedisQueue struct {
 		Sentinel bool     // True if sentinel, false if standalone.
@@ -40,6 +39,13 @@ type CassabonConfig struct {
 		Port int    // Port that statsd server listens on
 	}
 	Rollups map[string][]string // Map of regex and default rollups
+}
+
+// Redis struct for redis connection information
+type RedisSettings struct {
+	Sentinel bool     // True if sentinel, false if standalone.
+	Addr     []string // List of addresses in host:port format
+	DB       int64    // Redis DB number for the index.
 }
 
 // Get Rollup Settings
