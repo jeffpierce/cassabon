@@ -5,9 +5,17 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/jeffpierce/cassabon/config"
+	"github.com/jeffpierce/cassabon/logging"
 )
 
 func TestCarbonSocket(t *testing.T) {
+
+	config.G.Log.System = logging.NewLogger("system", "", logging.Fatal)
+	config.G.Log.Carbon = logging.NewLogger("carbon", "", logging.Fatal)
+	logging.Statsd.Open("", "", "cassabon")
+
 	fmt.Println("Testing TCP socket connection...")
 	go CarbonTCP("127.0.0.1", "2003")
 
@@ -41,12 +49,18 @@ func TestCarbonSocket(t *testing.T) {
 }
 
 func GoodMetric(conn net.Conn) {
+	config.G.Log.System = logging.NewLogger("system", "", logging.Fatal)
+	config.G.Log.Carbon = logging.NewLogger("carbon", "", logging.Fatal)
+	logging.Statsd.Open("", "", "cassabon")
 	testMetric := fmt.Sprintf("carbon.test 1 %d", time.Now().Unix())
 	fmt.Println("Sending metric:", testMetric)
 	fmt.Fprintf(conn, testMetric+"\n")
 }
 
 func BadMetric(conn net.Conn) {
+	config.G.Log.System = logging.NewLogger("system", "", logging.Fatal)
+	config.G.Log.Carbon = logging.NewLogger("carbon", "", logging.Fatal)
+	logging.Statsd.Open("", "", "cassabon")
 	testMetric := "carbon.terrible 9 Qsplork"
 	fmt.Println("Sending bad metric:", testMetric)
 	fmt.Fprintf(conn, testMetric+"\n")

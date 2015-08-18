@@ -29,6 +29,11 @@ func fetchConfiguration(confFile string) {
 	}
 
 	// Copy in values sourced solely from the configuration file.
+	config.G.API.Address = cnf.API.Address
+	config.G.API.Port = cnf.API.Port
+	config.G.Carbon.Address = cnf.Carbon.Address
+	config.G.Carbon.Port = cnf.Carbon.Port
+	config.G.Carbon.Protocol = cnf.Carbon.Protocol
 }
 
 func main() {
@@ -39,7 +44,7 @@ func main() {
 	// Get options provided on the command line.
 	flag.StringVar(&confFile, "conf", "", "Location of YAML configuration file.")
 	flag.StringVar(&config.G.Log.Logdir, "logdir", "", "Name of directory to contain log files (stderr if unspecified)")
-	flag.StringVar(&config.G.Log.Loglevel, "loglevel", "debug", "Log level: debug|info|warn|error|fatal")
+	flag.StringVar(&config.G.Log.Loglevel, "loglevel", "", "Log level: debug|info|warn|error|fatal")
 	flag.StringVar(&config.G.Statsd.Host, "statsdhost", "", "statsd host or IP address")
 	flag.StringVar(&config.G.Statsd.Port, "statsdport", "8125", "statsd port")
 	flag.Parse()
