@@ -3,6 +3,7 @@ package listener
 
 import (
 	"bufio"
+	"bytes"
 	"net"
 	"os"
 	"strconv"
@@ -45,45 +46,114 @@ func CarbonTCP(addr string, port string) {
 			// On receipt of a connection, spawn a goroutine to handle it.
 			tcpListener.SetDeadline(time.Now().Add(5 * time.Second))
 			if conn, err := tcpListener.Accept(); err == nil {
-				go metricHandler(conn)
+				go getTCPData(conn)
 			} else {
-				config.G.Log.System.LogDebug("CarbonTCP Accept() timed out")
+				if err.(net.Error).Timeout() {
+					config.G.Log.System.LogDebug("CarbonTCP Accept() timed out")
+				} else {
+					config.G.Log.System.LogWarn("CarbonTCP Accept() error: %v", err)
+				}
 			}
 		}
 	}
 }
 
-// UDP totally blocks hard.  Need to figure this out. -- Jeff 2015/08/14
+// getTCPData reads a line from a TCP connection and dispatches it.
+func getTCPData(conn net.Conn) {
 
-/* func CarbonUDP(addr string, port int) {
-	udpaddr := net.UDPAddr{Port: port, IP: net.ParseIP(addr)}
-	carbonUDPSocket, err := net.ListenUDP("udp", &udpaddr)
+	// Carbon metrics are terminated by newlines. Read line-by-line, and dispatch.
+	defer conn.Close()
+	scanner := bufio.NewScanner(conn)
+	for scanner.Scan() {
+		metricHandler(scanner.Text())
+	}
+	config.G.Log.Carbon.LogDebug("Returning from getTCPData")
+}
+
+// CarbonUDP listens for incoming Carbon UDP traffic and dispatches it.
+func CarbonUDP(addr string, port string) {
+
+	// Resolve the address:port, and start listening for UDP connections.
+	udpaddr, _ := net.ResolveUDPAddr("udp4", net.JoinHostPort(addr, port))
+	udpConn, err := net.ListenUDP("udp", udpaddr)
 	if err != nil {
-		// TODO:  Move to our own logger.
-		panic(err)
+		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
+		config.G.Log.System.LogFatal("Cannot listen for Carbon on UDP address %s: %v", udpConn.LocalAddr().String(), err)
+		os.Exit(3)
 	}
+	defer udpConn.Close()
+	config.G.Log.System.LogInfo("Listening on %s UDP for Carbon plaintext protocol", udpConn.LocalAddr().String())
 
-	defer carbonUDPSocket.Close()
-
-	fmt.Printf("Carbon UDP plaintext listener now listening on %s:%d\n", addr, port)
-
+	/* Read UDP packets and pass data to handler.
+	 *
+	 * Individual metrics lines may be spread across packet boundaries. This means that
+	 * we must avoid dispatching partial lines, because they will ilikely be invalid,
+	 * and certainly wrong.
+	 *
+	 * To resolve this, we only dispatch the part of the buffer up to the last newline,
+	 * and save the remainder for prepending to the next incoming buffer.
+	 */
+	line := ""                   // The (possibly concatenated) line to be dispatched
+	buf := make([]byte, 4096)    // The buffer into which UDP messages will be read
+	remBuf := make([]byte, 4096) // The buffer into which data following last newline will be copied
+	remBytes := 0                // The number of data bytes in remBuf
 	for {
-		go metricHandler(carbonUDPSocket)
+		select {
+		case <-config.G.Quit:
+			config.G.Log.System.LogInfo("CarbonUDP received QUIT message")
+			config.G.WG.Done()
+			return
+		default:
+			udpConn.SetDeadline(time.Now().Add(5 * time.Second))
+			bytesRead, _, err := udpConn.ReadFromUDP(buf)
+			if err == nil {
+
+				// Capture the position of the last newline in the input buffer.
+				lastNewline := bytes.LastIndex(buf[:bytesRead], []byte("\n"))
+				if remBytes > 0 {
+					// Concatenate previous remainder and current input.
+					line = string(append(remBuf[:remBytes], buf[:lastNewline]...))
+				} else {
+					// Use current input up to last newline present.
+					line = string(buf[:lastNewline])
+				}
+
+				// Is there a truncated metric in the current input buffer?
+				if lastNewline < bytesRead-1 {
+					// Save the unterminated data for prepending to next input.
+					remBytes = (bytesRead - 1) - lastNewline
+					copy(remBuf, buf[lastNewline+1:])
+				} else {
+					// Current input buffer ends on a metrics boundary.
+					remBytes = 0
+				}
+
+				go getUDPData(line)
+
+			} else {
+				if err.(net.Error).Timeout() {
+					config.G.Log.System.LogDebug("CarbonUDP Read() timed out")
+				} else {
+					config.G.Log.System.LogWarn("CarbonUDP Read() error: %v", err)
+				}
+			}
+		}
 	}
-} */
+}
+
+// getUDPData scans data received from a UDP connection and dispatches it.
+func getUDPData(buf string) {
+
+	// Carbon metrics are terminated by newlines. Read line-by-line, and dispatch.
+	scanner := bufio.NewScanner(strings.NewReader(buf))
+	for scanner.Scan() {
+		metricHandler(scanner.Text())
+	}
+	config.G.Log.Carbon.LogDebug("Returning from getUDPData")
+}
 
 // metricHandler reads, parses, and sends on a Carbon data packet.
-func metricHandler(conn net.Conn) {
-
-	// Carbon metrics are terminated by newlines. Read one line, and close the connection.
-	defer conn.Close()
-	line, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil {
-		// Log this as a Warn, because it's the client's error, not ours.
-		config.G.Log.Carbon.LogWarn("Unreadable metric \"%s\": %v", line, err)
-		logging.Statsd.Client.Inc("cassabon.carbon.received.failure", 1, 1.0)
-		return
-	}
+func metricHandler(line string) {
 
 	// Examine metric to ensure that it's a valid carbon metric triplet.
 	splitMetric := strings.Fields(line)
