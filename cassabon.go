@@ -108,11 +108,19 @@ func main() {
 			fetchConfiguration(confFile)
 		}
 
-		// Start the services we offer.
-		go listener.CarbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
-
-		// Note how many goroutines we started and must wait for on SIGHUP.
-		config.G.WG.Add(1)
+		// Start the Carbon listener; TCP, UDP, or both.
+		switch config.G.Carbon.Protocol {
+		case "tcp":
+			go listener.CarbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
+			config.G.WG.Add(1)
+		case "udp":
+			go listener.CarbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
+			config.G.WG.Add(1)
+		default:
+			go listener.CarbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
+			go listener.CarbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
+			config.G.WG.Add(2)
+		}
 
 		// Wait for receipt of a recognized signal.
 		config.G.Log.System.LogInfo("Application running")
