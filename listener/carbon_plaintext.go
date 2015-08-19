@@ -3,6 +3,7 @@ package listener
 
 import (
 	"bufio"
+	"bytes"
 	"net"
 	"os"
 	"strconv"
@@ -83,8 +84,19 @@ func CarbonUDP(addr string, port string) {
 	defer udpConn.Close()
 	config.G.Log.System.LogInfo("Listening on %s UDP for Carbon plaintext protocol", udpConn.LocalAddr().String())
 
-	// Start reading UDP packets and pass data to handler.
-	buf := make([]byte, 150)
+	/* Read UDP packets and pass data to handler.
+	 *
+	 * Individual metrics lines may be spread across packet boundaries. This means that
+	 * we must avoid dispatching partial lines, because they will ilikely be invalid,
+	 * and certainly wrong.
+	 *
+	 * To resolve this, we only dispatch the part of the buffer up to the last newline,
+	 * and save the remainder for prepending to the next incoming buffer.
+	 */
+	line := ""                   // The (possibly concatenated) line to be dispatched
+	buf := make([]byte, 4096)    // The buffer into which UDP messages will be read
+	remBuf := make([]byte, 4096) // The buffer into which data following last newline will be copied
+	remBytes := 0                // The number of data bytes in remBuf
 	for {
 		select {
 		case <-config.G.Quit:
@@ -93,14 +105,36 @@ func CarbonUDP(addr string, port string) {
 			return
 		default:
 			udpConn.SetDeadline(time.Now().Add(5 * time.Second))
-			_, _, err := udpConn.ReadFromUDP(buf)
+			bytesRead, _, err := udpConn.ReadFromUDP(buf)
 			if err == nil {
-				go getUDPData(string(buf))
+
+				// Capture the position of the last newline in the input buffer.
+				lastNewline := bytes.LastIndex(buf[:bytesRead], []byte("\n"))
+				if remBytes > 0 {
+					// Concatenate previous remainder and current input.
+					line = string(append(remBuf[:remBytes], buf[:lastNewline]...))
+				} else {
+					// Use current input up to last newline present.
+					line = string(buf[:lastNewline])
+				}
+
+				// Is there a truncated metric in the current input buffer?
+				if lastNewline < bytesRead-1 {
+					// Save the unterminated data for prepending to next input.
+					remBytes = (bytesRead - 1) - lastNewline
+					copy(remBuf, buf[lastNewline+1:])
+				} else {
+					// Current input buffer ends on a metrics boundary.
+					remBytes = 0
+				}
+
+				go getUDPData(line)
+
 			} else {
 				if err.(net.Error).Timeout() {
 					config.G.Log.System.LogDebug("CarbonUDP Read() timed out")
 				} else {
-					config.G.Log.System.LogDebug("CarbonUDP Read() error: %v", err)
+					config.G.Log.System.LogWarn("CarbonUDP Read() error: %v", err)
 				}
 			}
 		}
@@ -113,10 +147,7 @@ func getUDPData(buf string) {
 	// Carbon metrics are terminated by newlines. Read line-by-line, and dispatch.
 	scanner := bufio.NewScanner(strings.NewReader(buf))
 	for scanner.Scan() {
-		// Scanner returns nulls remaining in fixed-size buffer at end-of-data; skip them.
-		if scanner.Bytes()[0] != byte(0) {
-			metricHandler(scanner.Text())
-		}
+		metricHandler(scanner.Text())
 	}
 	config.G.Log.Carbon.LogDebug("Returning from getUDPData")
 }
