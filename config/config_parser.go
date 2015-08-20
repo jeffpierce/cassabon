@@ -46,7 +46,9 @@ type RedisSettings struct {
 // Get Rollup Settings
 func ParseConfig(configFile string) *CassabonConfig {
 
-	// Load config file
+	// Load config file.
+	// This happens before the logger is initialized because we also read in
+	// logger configuration, causing a cycle. So, we panic on errors.
 	yamlConfig, err := ioutil.ReadFile(configFile)
 
 	if err != nil {
