@@ -57,7 +57,7 @@ func (sm *StoreManager) insert() {
 	for {
 		select {
 		case <-config.G.Quit:
-			config.G.Log.System.LogInfo("StoreManager::timer received QUIT message")
+			config.G.Log.System.LogInfo("StoreManager::insert received QUIT message")
 			config.G.WG.Done()
 			return
 		case metric := <-sm.todo:
