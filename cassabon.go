@@ -13,30 +13,6 @@ import (
 	"github.com/jeffpierce/cassabon/logging"
 )
 
-func fetchConfiguration(confFile string) {
-
-	// Open, read, and parse the YAML.
-	cnf := config.ParseConfig(confFile)
-
-	// Fill in arguments not provided on the command line.
-	if config.G.Log.Logdir == "" {
-		config.G.Log.Logdir = cnf.Logging.Logdir
-	}
-	if config.G.Log.Loglevel == "" {
-		config.G.Log.Loglevel = cnf.Logging.Loglevel
-	}
-	if config.G.Statsd.Host == "" {
-		config.G.Statsd.Host = cnf.Statsd.Host
-	}
-
-	// Copy in values sourced solely from the configuration file.
-	config.G.API.Address = cnf.API.Address
-	config.G.API.Port = cnf.API.Port
-	config.G.Carbon.Address = cnf.Carbon.Address
-	config.G.Carbon.Port = cnf.Carbon.Port
-	config.G.Carbon.Protocol = cnf.Carbon.Protocol
-}
-
 func main() {
 
 	// The name of the YAML configuration file.
@@ -52,7 +28,7 @@ func main() {
 
 	// Fill in startup values not provided on the command line, if available.
 	if confFile != "" {
-		fetchConfiguration(confFile)
+		config.GetConfiguration(confFile)
 	}
 
 	// Set up logging.
@@ -95,7 +71,8 @@ func main() {
 	var sigterm = make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
 
-	config.G.MetricsInput = make(chan config.CarbonMetric, 10)
+	config.G.Channels.DataStore = make(chan config.CarbonMetric, config.G.Channels.DataStoreChanLen)
+	config.G.Channels.Indexer = make(chan config.CarbonMetric, config.G.Channels.IndexerChanLen)
 
 	// Repeat until terminated by SIGINT/SIGTERM.
 	configIsStale := false
@@ -108,7 +85,7 @@ func main() {
 
 		// Re-read the configuration to get any updated values.
 		if configIsStale && confFile != "" {
-			fetchConfiguration(confFile)
+			config.GetConfiguration(confFile)
 		}
 
 		// Start the StoreManager.

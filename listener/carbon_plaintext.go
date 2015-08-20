@@ -37,7 +37,7 @@ func CarbonTCP(addr string, port string) {
 			return
 		default:
 			// On receipt of a connection, spawn a goroutine to handle it.
-			tcpListener.SetDeadline(time.Now().Add(5 * time.Second))
+			tcpListener.SetDeadline(time.Now().Add(time.Duration(config.G.Parameters.Listener.TCPTimeout) * time.Second))
 			if conn, err := tcpListener.Accept(); err == nil {
 				go getTCPData(conn)
 			} else {
@@ -97,7 +97,7 @@ func CarbonUDP(addr string, port string) {
 			config.G.WG.Done()
 			return
 		default:
-			udpConn.SetDeadline(time.Now().Add(5 * time.Second))
+			udpConn.SetDeadline(time.Now().Add(time.Duration(config.G.Parameters.Listener.UDPTimeout) * time.Second))
 			bytesRead, _, err := udpConn.ReadFromUDP(buf)
 			if err == nil {
 
@@ -177,6 +177,6 @@ func metricHandler(line string) {
 	}
 
 	// Assemble into canonical struct and send to queue manager.
-	config.G.MetricsInput <- config.CarbonMetric{statPath, val, ts}
+	config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
 	logging.Statsd.Client.Inc("cassabon.carbon.received.success", 1, 1.0)
 }

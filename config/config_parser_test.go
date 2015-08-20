@@ -8,7 +8,7 @@ import (
 
 func TestParseConfig(t *testing.T) {
 	// Load yaml into config struct
-	config := ParseConfig("config_test.yaml")
+	config := parseConfig("config_test.yaml")
 
 	// Ensure we have a struct
 	typevar := reflect.TypeOf(config).Kind()

@@ -15,7 +15,7 @@ type StoreManager struct {
 func (sm *StoreManager) Init() {
 
 	// Initialize private objects.
-	sm.todo = make(chan config.CarbonMetric, 3)
+	sm.todo = make(chan config.CarbonMetric, config.G.Parameters.DataStore.TodoChanLen)
 	sm.setTimeout = make(chan time.Duration, 0)
 	sm.timeout = make(chan struct{}, 1)
 
@@ -26,7 +26,7 @@ func (sm *StoreManager) Init() {
 	go sm.run()
 
 	// Kick off the timer.
-	sm.setTimeout <- 3 * time.Second
+	sm.setTimeout <- time.Duration(config.G.Parameters.DataStore.MaxFlushDelay) * time.Second
 }
 
 func (sm *StoreManager) run() {
@@ -40,11 +40,11 @@ func (sm *StoreManager) run() {
 			config.G.Log.System.LogInfo("StoreManager::run received QUIT message")
 			config.G.WG.Done()
 			return
-		case metric := <-config.G.MetricsInput:
+		case metric := <-config.G.Channels.DataStore:
 			config.G.Log.Carbon.LogDebug("StoreManager received metric: %v", metric)
 
 			// Send the path off to the indexer.
-			// TODO: config.G.IndexerInput <- metric.Path
+			// TODO: config.G.Channels.Indexer <- metric
 
 			// Accumulate the entry for writing to Cassandra.
 			sm.todo <- metric
@@ -67,7 +67,7 @@ func (sm *StoreManager) insert() {
 			config.G.Log.Carbon.LogDebug("StoreManager::insert received timeout")
 			sm.flush()
 			select {
-			case sm.setTimeout <- 3 * time.Second:
+			case sm.setTimeout <- time.Duration(config.G.Parameters.DataStore.MaxFlushDelay) * time.Second:
 				// Notification sent
 			default:
 				// Do not block if channel is at capacity
