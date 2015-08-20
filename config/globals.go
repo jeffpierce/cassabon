@@ -23,8 +23,13 @@ type Globals struct {
 	Quit chan struct{}
 	WG   sync.WaitGroup
 
-	// Channel for sending metrics to the datastore.
-	MetricsInput chan CarbonMetric
+	// Channels for sending metrics between modules.
+	Channels struct {
+		DataStore        chan CarbonMetric
+		DataStoreChanLen int
+		Indexer          chan CarbonMetric
+		IndexerChanLen   int
+	}
 
 	// Integration into local filesystem and remote services.
 	Log struct {
@@ -59,5 +64,16 @@ type Globals struct {
 	}
 
 	// Configuration of internal elements.
-	Rollups map[string][]string // Map of regex and default rollups
+	Rollups    map[string][]string // Map of regex and default rollups
+	Parameters struct {
+		Listener struct {
+			TCPTimeout int
+			UDPTimeout int
+		}
+		DataStore struct {
+			MaxPendingMetrics int
+			MaxFlushDelay     int
+			TodoChanLen       int
+		}
+	}
 }

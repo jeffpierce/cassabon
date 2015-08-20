@@ -33,7 +33,22 @@ type CassabonConfig struct {
 		Host string // Host or IP address of statsd server
 		Port string // Port that statsd server listens on
 	}
-	Rollups map[string][]string // Map of regex and default rollups
+	Rollups  map[string][]string // Map of regex and default rollups
+	Channels struct {
+		DataStoreChanLen int // Length of the DataStore channel
+		IndexerChanLen   int // Length of the Indexer channel
+	}
+	Parameters struct {
+		Listener struct {
+			TCPTimeout int
+			UDPTimeout int
+		}
+		DataStore struct {
+			MaxPendingMetrics int
+			MaxFlushDelay     int
+			TodoChanLen       int
+		}
+	}
 }
 
 // Redis struct for redis connection information
@@ -44,7 +59,7 @@ type RedisSettings struct {
 }
 
 // Get Rollup Settings
-func ParseConfig(configFile string) *CassabonConfig {
+func parseConfig(configFile string) *CassabonConfig {
 
 	// Load config file.
 	// This happens before the logger is initialized because we also read in
@@ -67,4 +82,83 @@ func ParseConfig(configFile string) *CassabonConfig {
 
 	// Send back config struct
 	return config
+}
+
+func GetConfiguration(confFile string) {
+
+	// Open, read, and parse the YAML.
+	cnf := parseConfig(confFile)
+
+	// Fill in arguments not provided on the command line.
+	if G.Log.Logdir == "" {
+		G.Log.Logdir = cnf.Logging.Logdir
+	}
+	if G.Log.Loglevel == "" {
+		G.Log.Loglevel = cnf.Logging.Loglevel
+	}
+	if G.Statsd.Host == "" {
+		G.Statsd.Host = cnf.Statsd.Host
+	}
+
+	// Copy in values sourced solely from the configuration file.
+	G.API.Address = cnf.API.Address
+	G.API.Port = cnf.API.Port
+	G.Carbon.Address = cnf.Carbon.Address
+	G.Carbon.Port = cnf.Carbon.Port
+	G.Carbon.Protocol = cnf.Carbon.Protocol
+
+	// Copy in and sanitize the channel lengths.
+	G.Channels.DataStoreChanLen = cnf.Channels.DataStoreChanLen
+	if G.Channels.DataStoreChanLen < 10 {
+		G.Channels.DataStoreChanLen = 10
+	}
+	if G.Channels.DataStoreChanLen > 1000 {
+		G.Channels.DataStoreChanLen = 1000
+	}
+	G.Channels.IndexerChanLen = cnf.Channels.IndexerChanLen
+	if G.Channels.IndexerChanLen < 10 {
+		G.Channels.IndexerChanLen = 10
+	}
+	if G.Channels.IndexerChanLen > 1000 {
+		G.Channels.IndexerChanLen = 1000
+	}
+
+	// Copy in and sanitize the Listener internal parameters.
+	G.Parameters.Listener.TCPTimeout = cnf.Parameters.Listener.TCPTimeout
+	if G.Parameters.Listener.TCPTimeout < 1 {
+		G.Parameters.Listener.TCPTimeout = 1
+	}
+	if G.Parameters.Listener.TCPTimeout > 30 {
+		G.Parameters.Listener.TCPTimeout = 30
+	}
+	G.Parameters.Listener.UDPTimeout = cnf.Parameters.Listener.UDPTimeout
+	if G.Parameters.Listener.UDPTimeout < 1 {
+		G.Parameters.Listener.UDPTimeout = 1
+	}
+	if G.Parameters.Listener.UDPTimeout > 30 {
+		G.Parameters.Listener.UDPTimeout = 30
+	}
+
+	// Copy in and sanitize the DataStore internal parameters.
+	G.Parameters.DataStore.MaxPendingMetrics = cnf.Parameters.DataStore.MaxPendingMetrics
+	if G.Parameters.DataStore.MaxPendingMetrics < 1 {
+		G.Parameters.DataStore.MaxPendingMetrics = 1
+	}
+	if G.Parameters.DataStore.MaxPendingMetrics > 500 {
+		G.Parameters.DataStore.MaxPendingMetrics = 500
+	}
+	G.Parameters.DataStore.MaxFlushDelay = cnf.Parameters.DataStore.MaxFlushDelay
+	if G.Parameters.DataStore.MaxFlushDelay < 1 {
+		G.Parameters.DataStore.MaxFlushDelay = 1
+	}
+	if G.Parameters.DataStore.MaxFlushDelay > 30 {
+		G.Parameters.DataStore.MaxFlushDelay = 30
+	}
+	G.Parameters.DataStore.TodoChanLen = cnf.Parameters.DataStore.TodoChanLen
+	if G.Parameters.DataStore.TodoChanLen < 5 {
+		G.Parameters.DataStore.TodoChanLen = 5
+	}
+	if G.Parameters.DataStore.TodoChanLen > 100 {
+		G.Parameters.DataStore.TodoChanLen = 100
+	}
 }

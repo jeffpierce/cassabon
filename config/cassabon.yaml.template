@@ -4,7 +4,18 @@ logging:
 carbon:
     address: "0.0.0.0"
     port: 2003
-    protocol: "both"
+    protocol: "udp"
 statsd:
     host: "127.0.0.1"
     port: 8125
+channels:
+    dataStorechanlen: 10
+    indexerchanlen: 10
+parameters:
+    listener:
+        tcptimeout: 5
+        udptimeout: 5
+    datastore:
+        maxpendingmetrics: 25
+        maxflushdelay: 5
+        todochanlen: 3
