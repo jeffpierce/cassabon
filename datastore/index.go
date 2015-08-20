@@ -47,7 +47,7 @@ func IndexMetricPath(path string) {
 	pipe.Close()
 }
 
-// processMetricPath recursively processes
+// processMetricPath recursively indexes the metric path via the redis pipeline.
 func processMetricPath(splitPath *[]string, pathLen int, isLeaf bool, pipe *redis.Pipeline) *redis.Pipeline {
 	// Process the metric path one node at a time.  We store metrics in Redis as a sorted set with score
 	// 0 so that lexicographical search works.  Metrics are in the format of:
