@@ -8,7 +8,7 @@ import (
 	"syscall"
 
 	"github.com/jeffpierce/cassabon/config"
-	"github.com/jeffpierce/cassabon/engine"
+	"github.com/jeffpierce/cassabon/datastore"
 	"github.com/jeffpierce/cassabon/listener"
 	"github.com/jeffpierce/cassabon/logging"
 )
@@ -95,7 +95,7 @@ func main() {
 	var sigterm = make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
 
-	config.G.QueueManager = make(chan config.CarbonMetric, 10)
+	config.G.MetricInput = make(chan config.CarbonMetric, 10)
 
 	// Repeat until terminated by SIGINT/SIGTERM.
 	configIsStale := false
@@ -112,7 +112,7 @@ func main() {
 		}
 
 		// Start the QueueManager.
-		go engine.QueueManager()
+		go datastore.StoreManager()
 		config.G.WG.Add(1)
 
 		// Start the Carbon listener; TCP, UDP, or both.
