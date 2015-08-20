@@ -111,9 +111,9 @@ func main() {
 			fetchConfiguration(confFile)
 		}
 
-		// Start the QueueManager.
-		go datastore.StoreManager()
-		config.G.WG.Add(1)
+		// Start the StoreManager.
+		ds := new(datastore.StoreManager)
+		ds.Init()
 
 		// Start the Carbon listener; TCP, UDP, or both.
 		switch config.G.Carbon.Protocol {
