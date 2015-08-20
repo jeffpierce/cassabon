@@ -11,7 +11,7 @@ func StoreManager() {
 			config.G.Log.System.LogInfo("QueueManager received QUIT message")
 			config.G.WG.Done()
 			return
-		case metric := <-config.G.MetricInput:
+		case metric := <-config.G.MetricsInput:
 			config.G.Log.Carbon.LogDebug("QueueManager received metric: %v", metric)
 		}
 	}

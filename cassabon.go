@@ -95,7 +95,7 @@ func main() {
 	var sigterm = make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
 
-	config.G.MetricInput = make(chan config.CarbonMetric, 10)
+	config.G.MetricsInput = make(chan config.CarbonMetric, 10)
 
 	// Repeat until terminated by SIGINT/SIGTERM.
 	configIsStale := false

@@ -177,6 +177,6 @@ func metricHandler(line string) {
 	}
 
 	// Assemble into canonical struct and send to queue manager.
-	config.G.MetricInput <- config.CarbonMetric{statPath, val, ts}
+	config.G.MetricsInput <- config.CarbonMetric{statPath, val, ts}
 	logging.Statsd.Client.Inc("cassabon.carbon.received.success", 1, 1.0)
 }

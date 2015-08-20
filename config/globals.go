@@ -24,7 +24,7 @@ type Globals struct {
 	WG   sync.WaitGroup
 
 	// Channel for sending metrics to the datastore.
-	MetricInput chan CarbonMetric
+	MetricsInput chan CarbonMetric
 
 	// Integration into local filesystem and remote services.
 	Log struct {
