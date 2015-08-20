@@ -5,8 +5,9 @@ import "github.com/gocql/gocql"
 
 // Returns a round-robin simple connection pool to the Cassandra cluster.
 func CassandraSession(chosts []string, cport int, ckeyspace string) *gocql.Session {
+
 	// Retrieve cluster configuration.
-	cass := gocql.NewCluster(chost)
+	cass := gocql.NewCluster(chosts...)
 
 	// Set port and host discovery.
 	cass.Port = cport
@@ -16,7 +17,7 @@ func CassandraSession(chosts []string, cport int, ckeyspace string) *gocql.Sessi
 	cass.Keyspace = ckeyspace
 
 	// Create session
-	csession, _ := cluster.CreateSession()
+	csession, _ := cass.CreateSession()
 
 	// Defer closing
 	defer csession.Close()
