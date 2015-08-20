@@ -14,13 +14,6 @@ import (
 	"github.com/jeffpierce/cassabon/logging"
 )
 
-// CarbonMetric is the canonical representation of Carbon data.
-type CarbonMetric struct {
-	Path      string  // Metric path
-	Value     float64 // Metric Value
-	Timestamp float64 // Epoch timestamp
-}
-
 // CarbonTCP listens for incoming Carbon TCP traffic and dispatches it.
 func CarbonTCP(addr string, port string) {
 
@@ -183,8 +176,7 @@ func metricHandler(line string) {
 		return
 	}
 
-	// Assemble into canonical struct and send to enqueueing worker.
-	parsedMetric := CarbonMetric{statPath, val, ts}
-	config.G.Log.Carbon.LogDebug("Woohoo! Pushing metric into channel: %v", parsedMetric)
+	// Assemble into canonical struct and send to queue manager.
+	config.G.QueueManager <- config.CarbonMetric{statPath, val, ts}
 	logging.Statsd.Client.Inc("cassabon.carbon.received.success", 1, 1.0)
 }

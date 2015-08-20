@@ -6,6 +6,13 @@ import (
 	"github.com/jeffpierce/cassabon/logging"
 )
 
+// CarbonMetric is the canonical representation of Carbon data.
+type CarbonMetric struct {
+	Path      string  // Metric path
+	Value     float64 // Metric Value
+	Timestamp float64 // Epoch timestamp
+}
+
 // The globally accessible configuration and state object.
 var G Globals
 
@@ -15,6 +22,9 @@ type Globals struct {
 	// Goroutine management.
 	Quit chan struct{}
 	WG   sync.WaitGroup
+
+	// Channel for sending metrics to the queue manager.
+	QueueManager chan CarbonMetric
 
 	// Integration into local filesystem and remote services.
 	Log struct {
