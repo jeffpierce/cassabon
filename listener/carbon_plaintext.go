@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jeffpierce/cassabon/config"
+	"github.com/jeffpierce/cassabon/datastore"
 	"github.com/jeffpierce/cassabon/logging"
 )
 
@@ -175,6 +176,9 @@ func metricHandler(line string) {
 		logging.Statsd.Client.Inc("cassabon.carbon.received.failure", 1, 1.0)
 		return
 	}
+
+	// Send metric path off to be indexed.
+	go datastore.IndexMetricPath(statPath)
 
 	// Assemble into canonical struct and send to queue manager.
 	config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
