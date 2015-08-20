@@ -65,7 +65,7 @@ func processMetricPath(splitPath *[]string, pathLen int, isLeaf bool, pipe *redi
 	// Let's get our big endian representation of the length.
 	a := make([]byte, 2)
 	binary.BigEndian.PutUint16(a, uint16(pathLen))
-	bigE = hex.EncodeToString(a)
+	bigE := hex.EncodeToString(a)
 
 	// Construct the metric string
 	metric := strings.Join([]string{
