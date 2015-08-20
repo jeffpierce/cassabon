@@ -81,8 +81,5 @@ func processMetricPath(splitPath *[]string, pathLen int, isLeaf bool, pipe *redi
 	// Pop the last node of the metric off, and send back for processing the rest of the node.
 	_, splitPath = splitPath[len(splitPath)-1], splitPath[:len(a)-1]
 
-	// Decrement length rather than counting the length of the new slice, we know it's just 1 less
-	pathLen--
-
-	processMetricPath(splitPath, pathLen, false, pipe)
+	processMetricPath(splitPath, len(splitPath), false, pipe)
 }
