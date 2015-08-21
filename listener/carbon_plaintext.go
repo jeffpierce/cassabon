@@ -14,8 +14,26 @@ import (
 	"github.com/jeffpierce/cassabon/logging"
 )
 
-// CarbonTCP listens for incoming Carbon TCP traffic and dispatches it.
-func CarbonTCP(addr string, port string) {
+type CarbonPlaintextListener struct {
+}
+
+func (cpl *CarbonPlaintextListener) Init() {
+	switch config.G.Carbon.Protocol {
+	case "tcp":
+		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
+		config.G.WG.Add(1)
+	case "udp":
+		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
+		config.G.WG.Add(1)
+	default:
+		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
+		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
+		config.G.WG.Add(2)
+	}
+}
+
+// carbonTCP listens for incoming Carbon TCP traffic and dispatches it.
+func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string) {
 
 	// Resolve the address:port, and start listening for TCP connections.
 	tcpaddr, _ := net.ResolveTCPAddr("tcp4", net.JoinHostPort(addr, port))
@@ -39,7 +57,7 @@ func CarbonTCP(addr string, port string) {
 			// On receipt of a connection, spawn a goroutine to handle it.
 			tcpListener.SetDeadline(time.Now().Add(time.Duration(config.G.Parameters.Listener.TCPTimeout) * time.Second))
 			if conn, err := tcpListener.Accept(); err == nil {
-				go getTCPData(conn)
+				go cpl.getTCPData(conn)
 			} else {
 				if err.(net.Error).Timeout() {
 					config.G.Log.System.LogDebug("CarbonTCP Accept() timed out")
@@ -52,19 +70,19 @@ func CarbonTCP(addr string, port string) {
 }
 
 // getTCPData reads a line from a TCP connection and dispatches it.
-func getTCPData(conn net.Conn) {
+func (cpl *CarbonPlaintextListener) getTCPData(conn net.Conn) {
 
 	// Carbon metrics are terminated by newlines. Read line-by-line, and dispatch.
 	defer conn.Close()
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
-		metricHandler(scanner.Text())
+		cpl.metricHandler(scanner.Text())
 	}
 	config.G.Log.Carbon.LogDebug("Returning from getTCPData")
 }
 
-// CarbonUDP listens for incoming Carbon UDP traffic and dispatches it.
-func CarbonUDP(addr string, port string) {
+// carbonUDP listens for incoming Carbon UDP traffic and dispatches it.
+func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
 
 	// Resolve the address:port, and start listening for UDP connections.
 	udpaddr, _ := net.ResolveUDPAddr("udp4", net.JoinHostPort(addr, port))
@@ -121,7 +139,7 @@ func CarbonUDP(addr string, port string) {
 					remBytes = 0
 				}
 
-				go getUDPData(line)
+				go cpl.getUDPData(line)
 
 			} else {
 				if err.(net.Error).Timeout() {
@@ -135,18 +153,18 @@ func CarbonUDP(addr string, port string) {
 }
 
 // getUDPData scans data received from a UDP connection and dispatches it.
-func getUDPData(buf string) {
+func (cpl *CarbonPlaintextListener) getUDPData(buf string) {
 
 	// Carbon metrics are terminated by newlines. Read line-by-line, and dispatch.
 	scanner := bufio.NewScanner(strings.NewReader(buf))
 	for scanner.Scan() {
-		metricHandler(scanner.Text())
+		cpl.metricHandler(scanner.Text())
 	}
 	config.G.Log.Carbon.LogDebug("Returning from getUDPData")
 }
 
 // metricHandler reads, parses, and sends on a Carbon data packet.
-func metricHandler(line string) {
+func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 
 	// Examine metric to ensure that it's a valid carbon metric triplet.
 	splitMetric := strings.Fields(line)

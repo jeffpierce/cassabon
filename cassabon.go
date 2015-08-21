@@ -109,22 +109,11 @@ func main() {
 				config.G.Redis.Index.DB,
 			)
 		}
-
 		defer rc.Close()
 
-		// Start the Carbon listener; TCP, UDP, or both.
-		switch config.G.Carbon.Protocol {
-		case "tcp":
-			go listener.CarbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
-			config.G.WG.Add(1)
-		case "udp":
-			go listener.CarbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
-			config.G.WG.Add(1)
-		default:
-			go listener.CarbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
-			go listener.CarbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
-			config.G.WG.Add(2)
-		}
+		// Start the Carbon listener last.
+		cpl := new(listener.CarbonPlaintextListener)
+		cpl.Init()
 
 		// Wait for receipt of a recognized signal.
 		config.G.Log.System.LogInfo("Application running")
