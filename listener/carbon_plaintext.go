@@ -49,8 +49,9 @@ func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string) {
 	// Start listener and pass incoming connections to handler.
 	for {
 		select {
-		case <-config.G.Quit:
+		case <-config.G.QuitMain:
 			config.G.Log.System.LogInfo("CarbonTCP received QUIT message")
+			close(config.G.QuitListener) // No further input coming, other goroutines should exit.
 			config.G.WG.Done()
 			return
 		default:
@@ -110,8 +111,9 @@ func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
 	remBytes := 0                // The number of data bytes in remBuf
 	for {
 		select {
-		case <-config.G.Quit:
+		case <-config.G.QuitMain:
 			config.G.Log.System.LogInfo("CarbonUDP received QUIT message")
+			close(config.G.QuitListener) // No further input coming, other goroutines should exit.
 			config.G.WG.Done()
 			return
 		default:

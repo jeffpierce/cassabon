@@ -81,7 +81,8 @@ func main() {
 
 		// Perform initialization that is repeated on every SIGHUP.
 		config.G.Log.System.LogInfo("Application reading and applying current configuration")
-		config.G.Quit = make(chan struct{}, 1)
+		config.G.QuitMain = make(chan struct{}, 1)
+		config.G.QuitListener = make(chan struct{}, 1)
 
 		// Re-read the configuration to get any updated values.
 		if configIsStale && confFile != "" {
@@ -121,12 +122,13 @@ func main() {
 		case <-sighup:
 			config.G.Log.System.LogInfo("Application received SIGHUP")
 			configIsStale = true
-			close(config.G.Quit) // Notify all goroutines to exit
-			config.G.WG.Wait()   // Wait for them to exit
+			close(config.G.QuitMain) // Notify all goroutines to exit
+			config.G.WG.Wait()       // Wait for them to exit
 			logging.Reopen()
 		case <-sigterm:
 			config.G.Log.System.LogInfo("Application received SIGINT/SIGTERM, preparing to terminate")
-			close(config.G.Quit) // Notify all goroutines to exit - do NOT wait
+			close(config.G.QuitMain) // Notify all goroutines to exit
+			config.G.WG.Wait()       // Wait for them to exit
 			repeat = false
 		}
 	}
