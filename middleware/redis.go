@@ -1,15 +1,19 @@
 // Middleware contains the drivers for the various services Cassabon leverages.
 package middleware
 
-import "gopkg.in/redis.v3"
+import (
+	"strings"
+
+	"gopkg.in/redis.v3"
+)
 
 // RedisClient is used to initialize a connection to a stand-alone Redis server
 // that is not clustered or in a Sentinel pool. Returns the working Redis client
 // if good, otherwise, it returns nil.
-func RedisClient(raddr, rpwd string, rdb int64) *redis.Client {
+func RedisClient(raddr []string, rpwd string, rdb int64) *redis.Client {
 	// Initialize Redis client.  redis.NewClient returns a pointer.
 	rclient := redis.NewClient(&redis.Options{
-		Addr:     raddr,
+		Addr:     strings.Join(raddr, ","),
 		Password: rpwd,
 		DB:       rdb,
 	})

@@ -92,24 +92,8 @@ func main() {
 		ds := new(datastore.StoreManager)
 		ds.Init()
 
-		// Initialize a Redis connection pool.if config.G.Redis.Index.Sentinel {
-		if config.G.Redis.Index.Sentinel {
-			config.G.Log.System.LogDebug("Initializing Redis client (Sentinel)")
-			rc := middleware.RedisFailoverClient(
-				config.G.Redis.Index.Addr,
-				config.G.Redis.Index.Pwd,
-				config.G.Redis.Index.Master,
-				config.G.Redis.Index.DB,
-			)
-		} else {
-			config.G.Log.System.LogDebug("Initializing Redis client...")
-			rc := middleware.RedisClient(
-				config.G.Redis.Index.Addr,
-				config.G.Redis.Index.Pwd,
-				config.G.Redis.Index.DB,
-			)
-		}
-		defer rc.Close()
+		statIndexer := new(datastore.MetricsIndexer)
+		statIndexer.Init()
 
 		// Start the Carbon listener last.
 		cpl := new(listener.CarbonPlaintextListener)

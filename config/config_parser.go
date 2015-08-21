@@ -56,6 +56,8 @@ type RedisSettings struct {
 	Sentinel bool     // True if sentinel, false if standalone.
 	Addr     []string // List of addresses in host:port format
 	DB       int64    // Redis DB number for the index.
+	Pwd      string   // Password for Redis.
+	Master   string   // Master config name for sentinel settings.
 }
 
 // Get Rollup Settings
