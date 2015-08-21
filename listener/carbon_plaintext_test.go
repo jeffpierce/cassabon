@@ -17,10 +17,11 @@ func TestCarbonSocket(t *testing.T) {
 	logging.Statsd.Open("", "", "cassabon")
 
 	fmt.Println("Testing TCP socket connection...")
-	go CarbonTCP("127.0.0.1", "2003")
+	cpl := new(CarbonPlaintextListener)
+	go cpl.carbonTCP("127.0.0.1", "2003")
 
-	//	fmt.Println("Testing UDP socket connection...")
-	//	go CarbonUDP("127.0.0.1", 2003)
+	fmt.Println("Testing UDP socket connection...")
+	go cpl.carbonUDP("127.0.0.1", "2003")
 
 	time.Sleep(10)
 
@@ -37,13 +38,13 @@ func TestCarbonSocket(t *testing.T) {
 	tcpconnbad, _ := net.Dial("tcp", "127.0.0.1:2003")
 	BadMetric(tcpconnbad)
 
-	/*	fmt.Println("Sending good metric to UDP...")
-		udpconn, err := net.Dial("udp", "127.0.0.1:2003")
-		GoodMetric(udpconn)
+	fmt.Println("Sending good metric to UDP...")
+	udpconn, _ := net.Dial("udp", "127.0.0.1:2003")
+	GoodMetric(udpconn)
 
-		fmt.Println("Sending bad metric to UDP...")
-		udpconnbad, err := net.Dial("udp", "127.0.0.1:2003")
-		BadMetric(udpconnbad) */
+	fmt.Println("Sending bad metric to UDP...")
+	udpconnbad, _ := net.Dial("udp", "127.0.0.1:2003")
+	BadMetric(udpconnbad)
 
 	time.Sleep(100 * time.Millisecond)
 }
