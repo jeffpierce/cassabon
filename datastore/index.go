@@ -7,19 +7,43 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeffpierce/cassabon/config"
+	"github.com/jeffpierce/cassabon/middleware"
 	"gopkg.in/redis.v3"
 )
 
+type MetricsIndexer struct {
+	rc *redis.Client
+}
+
+func (indexer *MetricsIndexer) Init() {
+	if config.G.Redis.Index.Sentinel {
+		config.G.Log.System.LogDebug("Initializing Redis client (Sentinel)")
+		indexer.rc = middleware.RedisFailoverClient(
+			config.G.Redis.Index.Addr,
+			config.G.Redis.Index.Pwd,
+			config.G.Redis.Index.Master,
+			config.G.Redis.Index.DB,
+		)
+	} else {
+		config.G.Log.System.LogDebug("Initializing Redis client...")
+		indexer.rc = middleware.RedisClient(
+			config.G.Redis.Index.Addr,
+			config.G.Redis.Index.Pwd,
+			config.G.Redis.Index.DB,
+		)
+	}
+}
+
 // IndexMetricPath takes a metric path string and redis client, starts a pipeline, splits the metric,
 // and sends it off to be processed by processMetricPath().
-func IndexMetricPath(path string, rc *redis.Client) {
-	splitPath := strings.Split(path, '.')
-	pipe := processMetricPath(&splitPath, len(splitPath), true, rc.Pipeline())
-	pipe.Exec()
+func (indexer *MetricsIndexer) indexMetricPath(path string) {
+	splitPath := strings.Split(path, ".")
+	indexer.processMetricPath(splitPath, len(splitPath), true)
 }
 
 // processMetricPath recursively indexes the metric path via the redis pipeline.
-func processMetricPath(splitPath *[]string, pathLen int, isLeaf bool, pipe *redis.Pipeline) *redis.Pipeline {
+func (indexer *MetricsIndexer) processMetricPath(splitPath []string, pathLen int, isLeaf bool) {
 	// Process the metric path one node at a time.  We store metrics in Redis as a sorted set with score
 	// 0 so that lexicographical search works.  Metrics are in the format of:
 	//
@@ -27,7 +51,8 @@ func processMetricPath(splitPath *[]string, pathLen int, isLeaf bool, pipe *redi
 	//
 	// This keeps them ordered so that a ZRANGEBYLEX works when finding the next nodes in a path branch.
 
-	// If we've processed the whole thing, return the pipe to be executed.
+	pipe := indexer.rc.Pipeline()
+
 	for pathLen > 0 {
 		// Let's get our big endian representation of the length.
 		a := make([]byte, 2)
@@ -37,13 +62,15 @@ func processMetricPath(splitPath *[]string, pathLen int, isLeaf bool, pipe *redi
 		// Construct the metric string
 		metric := strings.Join([]string{
 			bigE,
-			strings.Join(splitPath),
-			strconv.FormatBool(isLeaf)}, ':')
+			strings.Join(splitPath, "."),
+			strconv.FormatBool(isLeaf)}, ":")
+
+		z := redis.Z{0, metric}
 
 		config.G.Log.System.LogDebug("Indexing metric %s", metric)
 
 		// Put it in the pipeline.
-		pipe.ZAdd("cassabon", 0, metric)
+		pipe.ZAdd("cassabon", z)
 
 		// Pop the last node of the metric off, set isLeaf to false, and resume loop.
 		_, splitPath = splitPath[len(splitPath)-1], splitPath[:len(a)-1]
@@ -51,6 +78,6 @@ func processMetricPath(splitPath *[]string, pathLen int, isLeaf bool, pipe *redi
 		pathLen = len(splitPath)
 	}
 
-	config.G.Log.System.LogDebug("Done processing metric, returning pipeline for execution.")
-	return pipe
+	pipe.Exec()
+	config.G.Log.System.LogDebug("Done processing metric.")
 }
