@@ -19,9 +19,6 @@ func CassandraSession(chosts []string, cport int, ckeyspace string) *gocql.Sessi
 	// Create session
 	csession, _ := cass.CreateSession()
 
-	// Defer closing
-	defer csession.Close()
-
 	// And return the session.
 	return csession
 }
