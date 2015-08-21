@@ -7,9 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeffpierce/cassabon/config"
-	"github.com/jeffpierce/cassabon/middleware"
 	"gopkg.in/redis.v3"
+
+	"github.com/jeffpierce/cassabon/config"
+	//"github.com/jeffpierce/cassabon/middleware"
 )
 
 type MetricsIndexer struct {
@@ -17,21 +18,42 @@ type MetricsIndexer struct {
 }
 
 func (indexer *MetricsIndexer) Init() {
-	if config.G.Redis.Index.Sentinel {
-		config.G.Log.System.LogDebug("Initializing Redis client (Sentinel)")
-		indexer.rc = middleware.RedisFailoverClient(
-			config.G.Redis.Index.Addr,
-			config.G.Redis.Index.Pwd,
-			config.G.Redis.Index.Master,
-			config.G.Redis.Index.DB,
-		)
-	} else {
-		config.G.Log.System.LogDebug("Initializing Redis client...")
-		indexer.rc = middleware.RedisClient(
-			config.G.Redis.Index.Addr,
-			config.G.Redis.Index.Pwd,
-			config.G.Redis.Index.DB,
-		)
+	// Start the goroutines.
+	config.G.WG.Add(1)
+	go indexer.run()
+}
+
+func (indexer *MetricsIndexer) run() {
+
+	/*
+		if config.G.Redis.Index.Sentinel {
+			config.G.Log.System.LogDebug("Initializing Redis client (Sentinel)")
+			indexer.rc = middleware.RedisFailoverClient(
+				config.G.Redis.Index.Addr,
+				config.G.Redis.Index.Pwd,
+				config.G.Redis.Index.Master,
+				config.G.Redis.Index.DB,
+			)
+		} else {
+			config.G.Log.System.LogDebug("Initializing Redis client...")
+			indexer.rc = middleware.RedisClient(
+				config.G.Redis.Index.Addr,
+				config.G.Redis.Index.Pwd,
+				config.G.Redis.Index.DB,
+			)
+		}
+		defer indexer.rc.Close()
+	*/
+	// Wait for entries to arrive, and process them.
+	for {
+		select {
+		case <-config.G.QuitListener:
+			config.G.Log.System.LogInfo("Indexer::run received QUIT message")
+			config.G.WG.Done()
+			return
+		case metric := <-config.G.Channels.Indexer:
+			config.G.Log.Carbon.LogDebug("Indexer received metric: %v", metric)
+		}
 	}
 }
 

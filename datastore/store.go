@@ -44,7 +44,7 @@ func (sm *StoreManager) run() {
 			config.G.Log.Carbon.LogDebug("StoreManager received metric: %v", metric)
 
 			// Send the path off to the indexer.
-			// TODO: config.G.Channels.Indexer <- metric
+			config.G.Channels.Indexer <- metric
 
 			// Accumulate the entry for writing to Cassandra.
 			sm.todo <- metric
