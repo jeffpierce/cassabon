@@ -105,6 +105,10 @@ func GetConfiguration(confFile string) {
 	// Copy in values sourced solely from the configuration file.
 	G.API.Address = cnf.API.Address
 	G.API.Port = cnf.API.Port
+
+	G.Redis.Index = cnf.Redis.Index
+	G.Redis.Queue = cnf.Redis.Queue
+
 	G.Carbon.Address = cnf.Carbon.Address
 	G.Carbon.Port = cnf.Carbon.Port
 	G.Carbon.Protocol = cnf.Carbon.Protocol

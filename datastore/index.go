@@ -4,13 +4,14 @@ package datastore
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"os"
 	"strconv"
 	"strings"
 
 	"gopkg.in/redis.v3"
 
 	"github.com/jeffpierce/cassabon/config"
-	//"github.com/jeffpierce/cassabon/middleware"
+	"github.com/jeffpierce/cassabon/middleware"
 )
 
 type MetricsIndexer struct {
@@ -25,25 +26,32 @@ func (indexer *MetricsIndexer) Init() {
 
 func (indexer *MetricsIndexer) run() {
 
-	/*
-		if config.G.Redis.Index.Sentinel {
-			config.G.Log.System.LogDebug("Initializing Redis client (Sentinel)")
-			indexer.rc = middleware.RedisFailoverClient(
-				config.G.Redis.Index.Addr,
-				config.G.Redis.Index.Pwd,
-				config.G.Redis.Index.Master,
-				config.G.Redis.Index.DB,
-			)
-		} else {
-			config.G.Log.System.LogDebug("Initializing Redis client...")
-			indexer.rc = middleware.RedisClient(
-				config.G.Redis.Index.Addr,
-				config.G.Redis.Index.Pwd,
-				config.G.Redis.Index.DB,
-			)
-		}
-		defer indexer.rc.Close()
-	*/
+	// Initialize Redis client pool.
+	if config.G.Redis.Index.Sentinel {
+		config.G.Log.System.LogDebug("Initializing Redis client (Sentinel)")
+		indexer.rc = middleware.RedisFailoverClient(
+			config.G.Redis.Index.Addr,
+			config.G.Redis.Index.Pwd,
+			config.G.Redis.Index.Master,
+			config.G.Redis.Index.DB,
+		)
+	} else {
+		config.G.Log.System.LogDebug("Initializing Redis client...")
+		indexer.rc = middleware.RedisClient(
+			config.G.Redis.Index.Addr,
+			config.G.Redis.Index.Pwd,
+			config.G.Redis.Index.DB,
+		)
+	}
+
+	if indexer.rc == nil {
+		// Make sure we have a good Redis client.  Without it, we can't do our job, so log, whine, and crash.
+		config.G.Log.System.LogFatal("Unable to connect to Redis for indexer at %s.", config.G.Redis.Index.Addr)
+		os.Exit(10)
+	}
+
+	defer indexer.rc.Close()
+
 	// Wait for entries to arrive, and process them.
 	for {
 		select {
@@ -53,6 +61,7 @@ func (indexer *MetricsIndexer) run() {
 			return
 		case metric := <-config.G.Channels.Indexer:
 			config.G.Log.Carbon.LogDebug("Indexer received metric: %v", metric)
+			indexer.indexMetricPath(metric.Path)
 		}
 	}
 }
@@ -82,24 +91,29 @@ func (indexer *MetricsIndexer) processMetricPath(splitPath []string, pathLen int
 		bigE := hex.EncodeToString(a)
 
 		// Construct the metric string
-		metric := strings.Join([]string{
+		metricPath := strings.Join([]string{
 			bigE,
 			strings.Join(splitPath, "."),
 			strconv.FormatBool(isLeaf)}, ":")
 
-		z := redis.Z{0, metric}
+		z := redis.Z{0, metricPath}
 
-		config.G.Log.System.LogDebug("Indexing metric %s", metric)
+		config.G.Log.System.LogDebug("Indexing metric %s", metricPath)
 
 		// Put it in the pipeline.
 		pipe.ZAdd("cassabon", z)
 
 		// Pop the last node of the metric off, set isLeaf to false, and resume loop.
-		_, splitPath = splitPath[len(splitPath)-1], splitPath[:len(a)-1]
+		_, splitPath = splitPath[len(splitPath)-1], splitPath[:len(splitPath)-1]
 		isLeaf = false
 		pathLen = len(splitPath)
 	}
 
-	pipe.Exec()
-	config.G.Log.System.LogDebug("Done processing metric.")
+	_, err := pipe.Exec()
+	if err != nil {
+		// Warn for now, we can change this later if we care.
+		config.G.Log.System.LogWarn("Received error when communicating with Redis: %v", err.Error())
+	} else {
+		config.G.Log.System.LogDebug("Finished processing full metric path.")
+	}
 }
