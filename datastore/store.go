@@ -36,7 +36,7 @@ func (sm *StoreManager) run() {
 	// Wait for metrics entries to arrive, and process them.
 	for {
 		select {
-		case <-config.G.Quit:
+		case <-config.G.QuitListener:
 			config.G.Log.System.LogInfo("StoreManager::run received QUIT message")
 			config.G.WG.Done()
 			return
@@ -56,8 +56,9 @@ func (sm *StoreManager) run() {
 func (sm *StoreManager) insert() {
 	for {
 		select {
-		case <-config.G.Quit:
+		case <-config.G.QuitListener:
 			config.G.Log.System.LogInfo("StoreManager::insert received QUIT message")
+			sm.flush()
 			config.G.WG.Done()
 			return
 		case metric := <-sm.todo:
@@ -80,14 +81,14 @@ func (sm *StoreManager) insert() {
 func (sm *StoreManager) timer() {
 	for {
 		select {
-		case <-config.G.Quit:
+		case <-config.G.QuitListener:
 			config.G.Log.System.LogInfo("StoreManager::timer received QUIT message")
 			config.G.WG.Done()
 			return
 		case duration := <-sm.setTimeout:
 			// Block in this state until a new entry is received.
 			select {
-			case <-config.G.Quit:
+			case <-config.G.QuitListener:
 				// Nothing; do handling above on next iteration.
 			case <-time.After(duration):
 				select {
@@ -103,8 +104,10 @@ func (sm *StoreManager) timer() {
 
 // accumulate records a metric for subsequent flush to the database.
 func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
+	config.G.Log.Carbon.LogDebug("StoreManager::accumulate")
 }
 
 // flush persists the accumulated metrics to the database.
 func (sm *StoreManager) flush() {
+	config.G.Log.Carbon.LogDebug("StoreManager::flush")
 }

@@ -20,8 +20,9 @@ var G Globals
 type Globals struct {
 
 	// Goroutine management.
-	Quit chan struct{}
-	WG   sync.WaitGroup
+	QuitMain     chan struct{}
+	QuitListener chan struct{}
+	WG           sync.WaitGroup
 
 	// Channels for sending metrics between modules.
 	Channels struct {
