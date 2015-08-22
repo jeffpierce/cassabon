@@ -93,8 +93,13 @@ func main() {
 		ds := new(datastore.StoreManager)
 		ds.Init()
 
+		// Start the Indexer
 		statIndexer := new(datastore.MetricsIndexer)
 		statIndexer.Init()
+
+		// Start the StatPathGopher
+		statGopher := new(datastore.StatPathGopher)
+		statGopher.Init()
 
 		// Start the Carbon listener last.
 		cpl := new(listener.CarbonPlaintextListener)
