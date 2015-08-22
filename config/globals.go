@@ -13,6 +13,8 @@ type CarbonMetric struct {
 	Timestamp float64 // Epoch timestamp
 }
 
+type IndexQuery struct{} // Stub, not sure what format it will take yet -- JP
+
 // The globally accessible configuration and state object.
 var G Globals
 
@@ -30,6 +32,8 @@ type Globals struct {
 		DataStoreChanLen int
 		Indexer          chan CarbonMetric
 		IndexerChanLen   int
+		Gopher           chan IndexQuery
+		GopherChanLen    int
 	}
 
 	// Integration into local filesystem and remote services.
