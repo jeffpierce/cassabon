@@ -51,7 +51,7 @@ func (gopher *StatPathGopher) Init() {
 	go gopher.run()
 }
 
-func (gopher *StatPathGopher) run() StatPathGopher.result {
+func (gopher *StatPathGopher) run() {
 	// Wait for a stat path query to arrive, then process it.
 	for {
 		select {
@@ -62,17 +62,6 @@ func (gopher *StatPathGopher) run() StatPathGopher.result {
 
 		case gopherQuery := <-config.G.Channels.Gopher:
 			config.G.Log.System.LogDebug("Gopher received a stat path query: %v", gopherQuery)
-
-			// Send to processor function.
-			resp := lookup(gopherQuery)
-
-			// Send it back down the channel.
-			config.G.Channels.Gopher <- resp
 		}
 	}
-}
-
-func (gopher *StatPathGopher) lookup(query config.IndexQuery) {
-	// Parse query and send to redis
-	config.G.Log.System.LogDebug("Received query: %v", config.IndexQuery)
 }
