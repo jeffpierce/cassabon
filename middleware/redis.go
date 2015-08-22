@@ -18,8 +18,6 @@ func RedisClient(raddr []string, rpwd string, rdb int64) *redis.Client {
 		DB:       rdb,
 	})
 
-	defer rclient.Close()
-
 	// Return the result of the client test.
 	return testRedisClient(rclient)
 }
@@ -34,8 +32,6 @@ func RedisFailoverClient(raddr []string, rpwd, master string, rdb int64) *redis.
 		Password:      rpwd,
 		DB:            rdb,
 	})
-
-	defer rclient.Close()
 
 	// Return the result of the client test.
 	return testRedisClient(rclient)

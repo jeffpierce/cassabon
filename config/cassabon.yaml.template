@@ -19,3 +19,18 @@ parameters:
         maxpendingmetrics: 25
         maxflushdelay: 5
         todochanlen: 3
+redis:
+    index:
+        addr:
+            - "127.0.0.1:6379"
+        db: 5
+        pwd: ""
+        sentinel: false
+        master: ""
+    queue:
+        addr:
+            - "127.0.0.1:6379"
+        db: 6
+        pwd: ""
+        sentinel: false
+        master: ""
