@@ -13,7 +13,10 @@ type CarbonMetric struct {
 	Timestamp float64 // Epoch timestamp
 }
 
-type IndexQuery struct{} // Stub, not sure what format it will take yet -- JP
+type IndexQuery struct {
+	Query   string      // Query
+	Channel chan string // Channel to send response back on.
+}
 
 // The globally accessible configuration and state object.
 var G Globals
