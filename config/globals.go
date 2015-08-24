@@ -15,7 +15,7 @@ type CarbonMetric struct {
 
 type IndexQuery struct {
 	Query   string      // Query
-	Channel chan string // Channel to send response back on.
+	Channel chan []byte // Channel to send response back on.
 }
 
 // The globally accessible configuration and state object.
