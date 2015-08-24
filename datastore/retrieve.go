@@ -4,8 +4,9 @@ package datastore
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
+	"encoding/json"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -17,6 +18,13 @@ import (
 
 type StatPathGopher struct {
 	rc *redis.Client // Redis client connection
+}
+
+type MetricResponse struct {
+	Path   string `json:"path"`
+	Depth  int    `json:"depth"`
+	Tenant string `json:"tenant"`
+	Leaf   bool   `json:"leaf"`
 }
 
 func (gopher *StatPathGopher) Init() {
@@ -95,73 +103,101 @@ func (gopher *StatPathGopher) bigEit(i int) string {
 	return hex.EncodeToString(a)
 }
 
-func (gopher *StatPathGopher) simpleWild(q string, l int) string {
-	// Queries with an ending wild card only are easy, as the response from
-	// ZRANGEBYLEX cassabon [bigE_len:path [bigE_len:path\xff is the answer.
-	var queryStringMax string
+func (gopher *StatPathGopher) getMax(s string) string {
+	// Returns the max range parameter for a ZRANGEBYLEX
+	var max string
 
-	queryString := strings.Join([]string{"[", gopher.bigEit(l), ":", q}, "")
-	if queryString[len(queryString)-1:] == "." {
+	if s[len(s)-1:] == "." || s[len(s)-1:] == ":" {
 		// If a dot is on the end, the max path has to have a \ put before the final dot.
-		queryStringMax = strings.Join([]string{
-			queryString[:len(queryString)-1],
-			"\\.\xff",
-		}, "",
-		)
+		max = strings.Join([]string{s[:len(s)-1], "\\", s[len(s)-1:], "\xff"}, "")
 	} else {
 		// If a dot's not on the end, just append "\xff"
-		queryStringMax = strings.Join([]string{queryString, "\xff"}, "")
+		max = strings.Join([]string{s, "\xff"}, "")
 	}
 
+	return max
+}
+
+func (gopher *StatPathGopher) simpleWild(q string, l int) []byte {
+	// Queries with an ending wild card only are easy, as the response from
+	// ZRANGEBYLEX cassabon [bigE_len:path [bigE_len:path\xff is the answer.
+	queryString := strings.Join([]string{"[", gopher.bigEit(l), ":", q}, "")
+	queryStringMax := gopher.getMax(queryString)
+
 	// Perform the query.
-	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeByScore{
+	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeBy{
 		queryString, queryStringMax, 0, 0,
 	}).Result()
 
-	if err != nil {
+	if err != nil || len(resp) == 0 {
 		// Errored, return empty set.
-		return "[]"
+		config.G.Log.System.LogWarn("Redis error or zero length response.")
+		return nil
 	}
 
 	// Send query results off to be processed into a string and return them.
 	return gopher.processQueryResults(resp, l)
 }
 
-func (gopher *StatPathGopher) noWild(q string, l int) string {
+func (gopher *StatPathGopher) noWild(q string, l int) []byte {
 	// No wild card means we should be retrieving one stat, or none at all.
 	queryString := strings.Join([]string{"[", gopher.bigEit(l), ":", q, ":"}, "")
+	queryStringMax := gopher.getMax(queryString)
 
-	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeByScore{
-		queryString, strings.Join([]string{queryString, "\xff"}, ""), 0, 0,
+	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeBy{
+		queryString, queryStringMax, 0, 0,
 	}).Result()
 
 	if err != nil || len(resp) == 0 {
 		// Error or empty set, return an empty set.
-		return "[]"
+		config.G.Log.System.LogInfo("Redis error or zero length response.")
+		return nil
 	}
 
 	return gopher.processQueryResults(resp, l)
 }
 
-func (gopher *StatPathGopher) complexWild(splitWild []string, l int) string {
-	// Stub.
-	return "[]"
+func (gopher *StatPathGopher) complexWild(splitWild []string, l int) []byte {
+	// Resolve multiple wildcards by pulling in the nodes with length l that start with
+	// the first part of the non-wildcard, then filter that set with a regex match.
+	var matches []string
+
+	queryString := strings.Join([]string{"[", gopher.bigEit(l), ":", splitWild[0]}, "")
+	queryStringMax := gopher.getMax(queryString)
+
+	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeBy{
+		queryString, queryStringMax, 0, 0,
+	}).Result()
+
+	if err != nil || len(resp) == 0 {
+		config.G.Log.System.LogInfo("Redis error or zero length response.")
+		return nil
+	}
+
+	// Build regular expression to match against results.
+	unsplit := strings.Join(splitWild, ".*")
+	resplit := strings.Split(unsplit, ".")
+	regex, _ := regexp.Compile(strings.Join(resplit, "\\."))
+
+	for _, iter := range resp {
+		if regex.MatchString(iter) {
+			matches = append(matches, iter)
+		}
+	}
+
+	return gopher.processQueryResults(matches, l)
 }
 
-func (gopher *StatPathGopher) processQueryResults(results []string, l int) string {
-	var parsedResponse []map[string]interface{}
+func (gopher *StatPathGopher) processQueryResults(results []string, l int) []byte {
+	var responseList []MetricResponse
 	// Process the result into a map, make it a string, send it along is the goal here.
 	for _, match := range results {
 		decodedString := strings.Split(match, ":")
 		isLeaf, _ := strconv.ParseBool(decodedString[2])
-		stringMap := make(map[string]interface{})
-		stringMap["path"] = decodedString[1]
-		stringMap["depth"] = l
-		stringMap["tenant"] = ""
-		stringMap["leaf"] = isLeaf
-		parsedResponse = append(parsedResponse, stringMap)
+		m := MetricResponse{decodedString[1], l, "", isLeaf}
+		responseList = append(responseList, m)
 	}
 
-	r := fmt.Sprintf("%v", parsedResponse)
-	return r
+	j, _ := json.Marshal(responseList)
+	return j
 }
