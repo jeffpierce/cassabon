@@ -47,10 +47,7 @@ type Globals struct {
 		Carbon   *logging.FileLogger
 		API      *logging.FileLogger
 	}
-	Statsd struct {
-		Host string // Host or IP address of statsd server
-		Port string // Port that statsd server listens on
-	}
+	Statsd    StatsdSettings
 	Cassandra struct {
 		Hosts []string // List of hostnames or IP addresses of Cassandra ring
 		Port  string   // Cassandra port

@@ -29,10 +29,7 @@ type CassabonConfig struct {
 		Port     string // Port for Carbon Receiver to listen on
 		Protocol string // "tcp", "udp" or "both" are acceptable
 	}
-	Statsd struct {
-		Host string // Host or IP address of statsd server
-		Port string // Port that statsd server listens on
-	}
+	Statsd   StatsdSettings
 	Rollups  map[string][]string // Map of regex and default rollups
 	Channels struct {
 		DataStoreChanLen int // Length of the DataStore channel
@@ -58,6 +55,21 @@ type RedisSettings struct {
 	DB       int64    // Redis DB number for the index.
 	Pwd      string   // Password for Redis.
 	Master   string   // Master config name for sentinel settings.
+}
+
+type StatsdSettings struct {
+	Host   string // Host or IP address of statsd server
+	Port   string // Port that statsd server listens on
+	Events struct {
+		ReceiveOK struct {
+			Key        string
+			SampleRate float32
+		}
+		ReceiveFail struct {
+			Key        string
+			SampleRate float32
+		}
+	}
 }
 
 // Get Rollup Settings
@@ -98,11 +110,10 @@ func GetConfiguration(confFile string) {
 	if G.Log.Loglevel == "" {
 		G.Log.Loglevel = cnf.Logging.Loglevel
 	}
-	if G.Statsd.Host == "" {
-		G.Statsd.Host = cnf.Statsd.Host
-	}
 
 	// Copy in values sourced solely from the configuration file.
+	G.Statsd = cnf.Statsd
+
 	G.API.Address = cnf.API.Address
 	G.API.Port = cnf.API.Port
 
