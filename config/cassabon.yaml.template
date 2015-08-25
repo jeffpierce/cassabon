@@ -8,6 +8,13 @@ carbon:
 statsd:
     host: "127.0.0.1"
     port: 8125
+    events:
+        receiveok:
+            key: "cassabon.carbon.received.success"
+            samplerate: 0.1
+        receivefail:
+            key: "cassabon.carbon.received.failure"
+            samplerate: 1.0
 channels:
     dataStorechanlen: 10
     indexerchanlen: 10
