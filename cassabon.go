@@ -22,8 +22,6 @@ func main() {
 	flag.StringVar(&confFile, "conf", "config/cassabon.yaml", "Location of YAML configuration file.")
 	flag.StringVar(&config.G.Log.Logdir, "logdir", "", "Name of directory to contain log files (stderr if unspecified)")
 	flag.StringVar(&config.G.Log.Loglevel, "loglevel", "", "Log level: debug|info|warn|error|fatal")
-	flag.StringVar(&config.G.Statsd.Host, "statsdhost", "", "statsd host or IP address")
-	flag.StringVar(&config.G.Statsd.Port, "statsdport", "8125", "statsd port")
 	flag.Parse()
 
 	// Fill in startup values not provided on the command line, if available.

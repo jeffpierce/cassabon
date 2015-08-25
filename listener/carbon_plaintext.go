@@ -173,7 +173,7 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 	if len(splitMetric) != 3 {
 		// Log this as a Warn, because it's the client's error, not ours.
 		config.G.Log.Carbon.LogWarn("Malformed metric, expected 3 fields, found %d: \"%s\"", len(splitMetric), line)
-		logging.Statsd.Client.Inc("cassabon.carbon.received.failure", 1, 1.0)
+		logging.Statsd.Client.Inc(config.G.Statsd.Events.ReceiveFail.Key, 1, config.G.Statsd.Events.ReceiveFail.SampleRate)
 		return
 	}
 
@@ -184,7 +184,7 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 	val, err := strconv.ParseFloat(splitMetric[1], 64)
 	if err != nil {
 		config.G.Log.Carbon.LogWarn("Malformed metric, cannnot parse value as float: \"%s\"", splitMetric[1])
-		logging.Statsd.Client.Inc("cassabon.carbon.received.failure", 1, 1.0)
+		logging.Statsd.Client.Inc(config.G.Statsd.Events.ReceiveFail.Key, 1, config.G.Statsd.Events.ReceiveFail.SampleRate)
 		return
 	}
 
@@ -192,11 +192,11 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 	ts, err := strconv.ParseFloat(splitMetric[2], 64)
 	if err != nil {
 		config.G.Log.Carbon.LogWarn("Malformed metric, cannnot parse timestamp as float: \"%s\"", splitMetric[2])
-		logging.Statsd.Client.Inc("cassabon.carbon.received.failure", 1, 1.0)
+		logging.Statsd.Client.Inc(config.G.Statsd.Events.ReceiveFail.Key, 1, config.G.Statsd.Events.ReceiveFail.SampleRate)
 		return
 	}
 
 	// Assemble into canonical struct and send to queue manager.
 	config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
-	logging.Statsd.Client.Inc("cassabon.carbon.received.success", 1, 1.0)
+	logging.Statsd.Client.Inc(config.G.Statsd.Events.ReceiveOK.Key, 1, config.G.Statsd.Events.ReceiveOK.SampleRate)
 }
