@@ -65,7 +65,7 @@ func (gopher *StatPathGopher) run() {
 	for {
 		select {
 		case <-config.G.QuitListener:
-			config.G.Log.System.LogInfo("Gopher::run received QUIT message")
+			config.G.Log.System.LogDebug("Gopher::run received QUIT message")
 			config.G.WG.Done()
 			return
 

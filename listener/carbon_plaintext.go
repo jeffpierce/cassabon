@@ -50,7 +50,7 @@ func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string) {
 	for {
 		select {
 		case <-config.G.QuitMain:
-			config.G.Log.System.LogInfo("CarbonTCP received QUIT message")
+			config.G.Log.System.LogDebug("CarbonTCP received QUIT message")
 			close(config.G.QuitListener) // No further input coming, other goroutines should exit.
 			config.G.WG.Done()
 			return
@@ -112,7 +112,7 @@ func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
 	for {
 		select {
 		case <-config.G.QuitMain:
-			config.G.Log.System.LogInfo("CarbonUDP received QUIT message")
+			config.G.Log.System.LogDebug("CarbonUDP received QUIT message")
 			close(config.G.QuitListener) // No further input coming, other goroutines should exit.
 			config.G.WG.Done()
 			return

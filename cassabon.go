@@ -46,7 +46,7 @@ func main() {
 	defer config.G.Log.API.Close()
 
 	// Announce the application startup in the logs.
-	config.G.Log.System.LogInfo("Application startup in progress")
+	config.G.Log.System.LogInfo("Startup in progress")
 	if errLogLevel != nil {
 		config.G.Log.System.LogWarn("Bad command line argument: %v", errLogLevel)
 	}
@@ -78,7 +78,7 @@ func main() {
 	for repeat {
 
 		// Perform initialization that is repeated on every SIGHUP.
-		config.G.Log.System.LogInfo("Application reading and applying current configuration")
+		config.G.Log.System.LogInfo("Reading configuration file %s", confFile)
 		config.G.QuitMain = make(chan struct{}, 1)
 		config.G.QuitListener = make(chan struct{}, 1)
 
@@ -104,16 +104,16 @@ func main() {
 		cpl.Init()
 
 		// Wait for receipt of a recognized signal.
-		config.G.Log.System.LogInfo("Application running")
+		config.G.Log.System.LogInfo("Initialization complete")
 		select {
 		case <-sighup:
-			config.G.Log.System.LogInfo("Application received SIGHUP")
+			config.G.Log.System.LogInfo("Received SIGHUP")
 			configIsStale = true
 			close(config.G.QuitMain) // Notify all goroutines to exit
 			config.G.WG.Wait()       // Wait for them to exit
 			logging.Reopen()
 		case <-sigterm:
-			config.G.Log.System.LogInfo("Application received SIGINT/SIGTERM, preparing to terminate")
+			config.G.Log.System.LogInfo("Received SIGINT/SIGTERM, preparing to terminate")
 			close(config.G.QuitMain) // Notify all goroutines to exit
 			config.G.WG.Wait()       // Wait for them to exit
 			repeat = false
@@ -121,5 +121,5 @@ func main() {
 	}
 
 	// Final cleanup.
-	config.G.Log.System.LogInfo("Application termination complete")
+	config.G.Log.System.LogInfo("Termination complete")
 }
