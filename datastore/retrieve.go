@@ -125,7 +125,7 @@ func (gopher *StatPathGopher) simpleWild(q string, l int) []byte {
 	queryStringMax := gopher.getMax(queryString)
 
 	// Perform the query.
-	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeBy{
+	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeByScore{
 		queryString, queryStringMax, 0, 0,
 	}).Result()
 
@@ -144,7 +144,7 @@ func (gopher *StatPathGopher) noWild(q string, l int) []byte {
 	queryString := strings.Join([]string{"[", gopher.bigEit(l), ":", q, ":"}, "")
 	queryStringMax := gopher.getMax(queryString)
 
-	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeBy{
+	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeByScore{
 		queryString, queryStringMax, 0, 0,
 	}).Result()
 
@@ -165,7 +165,7 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) []byte {
 	queryString := strings.Join([]string{"[", gopher.bigEit(l), ":", splitWild[0]}, "")
 	queryStringMax := gopher.getMax(queryString)
 
-	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeBy{
+	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeByScore{
 		queryString, queryStringMax, 0, 0,
 	}).Result()
 
