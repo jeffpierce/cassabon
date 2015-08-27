@@ -109,10 +109,10 @@ func (gopher *StatPathGopher) getMax(s string) string {
 
 	if s[len(s)-1:] == "." || s[len(s)-1:] == ":" {
 		// If a dot is on the end, the max path has to have a \ put before the final dot.
-		max = strings.Join([]string{s[:len(s)-1], "\\", s[len(s)-1:], "\xff"}, "")
+		max = strings.Join([]string{s[:len(s)-1], `\`, s[len(s)-1:], `\xff`}, "")
 	} else {
 		// If a dot's not on the end, just append "\xff"
-		max = strings.Join([]string{s, "\xff"}, "")
+		max = strings.Join([]string{s, `\xff`}, "")
 	}
 
 	return max
@@ -165,9 +165,15 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) []byte {
 	queryString := strings.Join([]string{"[", gopher.bigEit(l), ":", splitWild[0]}, "")
 	queryStringMax := gopher.getMax(queryString)
 
+	config.G.Log.System.LogDebug(
+		"complexWild querying redis with %s, %s as range", queryString, queryStringMax)
+
 	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeByScore{
 		queryString, queryStringMax, 0, 0,
 	}).Result()
+
+	config.G.Log.System.LogDebug(
+		"Received %v as response from redis.", resp)
 
 	if err != nil || len(resp) == 0 {
 		config.G.Log.System.LogInfo("Redis error or zero length response.")
@@ -175,11 +181,16 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) []byte {
 	}
 
 	// Build regular expression to match against results.
-	unsplit := strings.Join(splitWild, ".*")
-	resplit := strings.Split(unsplit, ".")
-	regex, _ := regexp.Compile(strings.Join(resplit, "\\."))
+	rawRegex := strings.Join(splitWild, `.*`)
+	config.G.Log.API.LogDebug("Attempting to compile %s into regex", rawRegex)
+
+	regex, err := regexp.Compile(rawRegex)
+	if err != nil {
+		config.G.Log.API.LogError("Could not compile %s into regex, %v", rawRegex, err)
+	}
 
 	for _, iter := range resp {
+		config.G.Log.API.LogDebug("Attempting to match %s against %s", rawRegex, iter)
 		if regex.MatchString(iter) {
 			matches = append(matches, iter)
 		}
