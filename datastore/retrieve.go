@@ -182,16 +182,16 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) []byte {
 
 	// Build regular expression to match against results.
 	rawRegex := strings.Join(splitWild, `.*`)
-	config.G.Log.API.LogDebug("Attempting to compile %s into regex", rawRegex)
+	config.G.Log.System.LogDebug("Attempting to compile %s into regex", rawRegex)
 
 	regex, err := regexp.Compile(rawRegex)
 	if err != nil {
-		config.G.Log.API.LogError("Could not compile %s into regex, %v", rawRegex, err)
+		config.G.Log.System.LogError("Could not compile %s into regex, %v", rawRegex, err)
 		return nil
 	}
 
 	for _, iter := range resp {
-		config.G.Log.API.LogDebug("Attempting to match %s against %s", rawRegex, iter)
+		config.G.Log.System.LogDebug("Attempting to match %s against %s", rawRegex, iter)
 		if regex.MatchString(iter) {
 			matches = append(matches, iter)
 		}
