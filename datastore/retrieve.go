@@ -187,6 +187,7 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) []byte {
 	regex, err := regexp.Compile(rawRegex)
 	if err != nil {
 		config.G.Log.API.LogError("Could not compile %s into regex, %v", rawRegex, err)
+		return nil
 	}
 
 	for _, iter := range resp {
