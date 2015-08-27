@@ -17,8 +17,9 @@ type CassabonConfig struct {
 		Port  int      // Cassandra port
 	}
 	API struct {
-		Address string // HTTP API listens on this address
-		Port    string // HTTP API listens on this port
+		Address         string // HTTP API listens on this address
+		Port            string // HTTP API listens on this port
+		HealthCheckFile string // Location of healthcheck file.
 	}
 	Redis struct {
 		Index RedisSettings // Settings for Redis Index
@@ -34,6 +35,7 @@ type CassabonConfig struct {
 	Channels struct {
 		DataStoreChanLen int // Length of the DataStore channel
 		IndexerChanLen   int // Length of the Indexer channel
+		GopherChanLen    int // Length of the StatGopher channel
 	}
 	Parameters struct {
 		Listener struct {
@@ -116,6 +118,7 @@ func GetConfiguration(confFile string) {
 
 	G.API.Address = cnf.API.Address
 	G.API.Port = cnf.API.Port
+	G.API.HealthCheckFile = cnf.API.HealthCheckFile
 
 	G.Redis.Index = cnf.Redis.Index
 	G.Redis.Queue = cnf.Redis.Queue
@@ -138,6 +141,13 @@ func GetConfiguration(confFile string) {
 	}
 	if G.Channels.IndexerChanLen > 1000 {
 		G.Channels.IndexerChanLen = 1000
+	}
+	G.Channels.GopherChanLen = cnf.Channels.GopherChanLen
+	if G.Channels.GopherChanLen < 10 {
+		G.Channels.GopherChanLen = 10
+	}
+	if G.Channels.GopherChanLen > 1000 {
+		G.Channels.GopherChanLen = 1000
 	}
 
 	// Copy in and sanitize the Listener internal parameters.

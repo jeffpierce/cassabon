@@ -18,6 +18,11 @@ statsd:
 channels:
     dataStorechanlen: 10
     indexerchanlen: 10
+    gopherchanlen: 100
+api:
+    address: "127.0.0.1"
+    port: 8080
+    healthcheckfile: "config/healthcheckfile"
 parameters:
     listener:
         tcptimeout: 5

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/jeffpierce/cassabon/api"
 	"github.com/jeffpierce/cassabon/config"
 	"github.com/jeffpierce/cassabon/datastore"
 	"github.com/jeffpierce/cassabon/listener"
@@ -71,6 +72,7 @@ func main() {
 
 	config.G.Channels.DataStore = make(chan config.CarbonMetric, config.G.Channels.DataStoreChanLen)
 	config.G.Channels.Indexer = make(chan config.CarbonMetric, config.G.Channels.IndexerChanLen)
+	config.G.Channels.Gopher = make(chan config.IndexQuery, config.G.Channels.GopherChanLen)
 
 	// Repeat until terminated by SIGINT/SIGTERM.
 	configIsStale := false
@@ -103,17 +105,23 @@ func main() {
 		cpl := new(listener.CarbonPlaintextListener)
 		cpl.Init()
 
+		// Start Cassabon Web API
+		api := new(api.CassabonAPI)
+		api.Start()
+
 		// Wait for receipt of a recognized signal.
 		config.G.Log.System.LogInfo("Initialization complete")
 		select {
 		case <-sighup:
 			config.G.Log.System.LogInfo("Received SIGHUP")
 			configIsStale = true
+			api.Stop()               // Notify API to stop
 			close(config.G.QuitMain) // Notify all goroutines to exit
 			config.G.WG.Wait()       // Wait for them to exit
 			logging.Reopen()
 		case <-sigterm:
 			config.G.Log.System.LogInfo("Received SIGINT/SIGTERM, preparing to terminate")
+			api.Stop()               // Notify API to stop
 			close(config.G.QuitMain) // Notify all goroutines to exit
 			config.G.WG.Wait()       // Wait for them to exit
 			repeat = false

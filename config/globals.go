@@ -59,8 +59,9 @@ type Globals struct {
 
 	// Configuration of the services offered to clients.
 	API struct {
-		Address string // HTTP API listens on this address
-		Port    string // HTTP API listens on this port
+		Address         string // HTTP API listens on this address
+		Port            string // HTTP API listens on this port
+		HealthCheckFile string // Health check file.
 	}
 	Carbon struct {
 		Address  string // Address for Carbon Receiver to listen on
