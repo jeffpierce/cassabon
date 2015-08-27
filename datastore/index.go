@@ -57,7 +57,7 @@ func (indexer *MetricsIndexer) run() {
 	for {
 		select {
 		case <-config.G.QuitListener:
-			config.G.Log.System.LogInfo("Indexer::run received QUIT message")
+			config.G.Log.System.LogDebug("Indexer::run received QUIT message")
 			config.G.WG.Done()
 			return
 		case metric := <-config.G.Channels.Indexer:
@@ -112,8 +112,8 @@ func (indexer *MetricsIndexer) processMetricPath(splitPath []string, pathLen int
 
 	_, err := pipe.Exec()
 	if err != nil {
-		// Warn for now, we can change this later if we care.
-		config.G.Log.System.LogWarn("Received error when communicating with Redis: %v", err.Error())
+		// How do we want to degrade gracefully when this fails?
+		config.G.Log.System.LogError("Redis error: %v", err)
 	} else {
 		config.G.Log.System.LogDebug("Finished processing full metric path.")
 	}

@@ -37,7 +37,7 @@ func (sm *StoreManager) run() {
 	for {
 		select {
 		case <-config.G.QuitListener:
-			config.G.Log.System.LogInfo("StoreManager::run received QUIT message")
+			config.G.Log.System.LogDebug("StoreManager::run received QUIT message")
 			config.G.WG.Done()
 			return
 		case metric := <-config.G.Channels.DataStore:
@@ -57,7 +57,7 @@ func (sm *StoreManager) insert() {
 	for {
 		select {
 		case <-config.G.QuitListener:
-			config.G.Log.System.LogInfo("StoreManager::insert received QUIT message")
+			config.G.Log.System.LogDebug("StoreManager::insert received QUIT message")
 			sm.flush()
 			config.G.WG.Done()
 			return
@@ -82,7 +82,7 @@ func (sm *StoreManager) timer() {
 	for {
 		select {
 		case <-config.G.QuitListener:
-			config.G.Log.System.LogInfo("StoreManager::timer received QUIT message")
+			config.G.Log.System.LogDebug("StoreManager::timer received QUIT message")
 			config.G.WG.Done()
 			return
 		case duration := <-sm.setTimeout:
