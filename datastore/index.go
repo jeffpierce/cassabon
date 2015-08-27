@@ -61,7 +61,7 @@ func (indexer *MetricsIndexer) run() {
 			config.G.WG.Done()
 			return
 		case metric := <-config.G.Channels.Indexer:
-			config.G.Log.Carbon.LogDebug("Indexer received metric: %v", metric)
+			config.G.Log.System.LogDebug("Indexer received metric: %v", metric)
 			go indexer.indexMetricPath(metric.Path)
 		}
 	}

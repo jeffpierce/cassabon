@@ -41,7 +41,7 @@ func (sm *StoreManager) run() {
 			config.G.WG.Done()
 			return
 		case metric := <-config.G.Channels.DataStore:
-			config.G.Log.Carbon.LogDebug("StoreManager received metric: %v", metric)
+			config.G.Log.System.LogDebug("StoreManager received metric: %v", metric)
 
 			// Send the path off to the indexer.
 			config.G.Channels.Indexer <- metric
@@ -62,10 +62,10 @@ func (sm *StoreManager) insert() {
 			config.G.WG.Done()
 			return
 		case metric := <-sm.todo:
-			config.G.Log.Carbon.LogDebug("StoreManager::insert received metric: %v", metric)
+			config.G.Log.System.LogDebug("StoreManager::insert received metric: %v", metric)
 			sm.accumulate(metric)
 		case <-sm.timeout:
-			config.G.Log.Carbon.LogDebug("StoreManager::insert received timeout")
+			config.G.Log.System.LogDebug("StoreManager::insert received timeout")
 			sm.flush()
 			select {
 			case sm.setTimeout <- time.Duration(config.G.Parameters.DataStore.MaxFlushDelay) * time.Second:
@@ -104,10 +104,10 @@ func (sm *StoreManager) timer() {
 
 // accumulate records a metric for subsequent flush to the database.
 func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
-	config.G.Log.Carbon.LogDebug("StoreManager::accumulate")
+	config.G.Log.System.LogDebug("StoreManager::accumulate")
 }
 
 // flush persists the accumulated metrics to the database.
 func (sm *StoreManager) flush() {
-	config.G.Log.Carbon.LogDebug("StoreManager::flush")
+	config.G.Log.System.LogDebug("StoreManager::flush")
 }
