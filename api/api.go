@@ -26,7 +26,7 @@ func (api *CassabonAPI) Start() {
 }
 
 func (api *CassabonAPI) Stop() {
-	config.G.Log.API.LogInfo("API received Stop command, gracefully shutting down.")
+	config.G.Log.System.LogInfo("API received Stop command, gracefully shutting down.")
 	graceful.Shutdown()
 	config.G.WG.Done()
 }
@@ -45,7 +45,7 @@ func (api *CassabonAPI) run() {
 	api.server.Delete("/remove/metric/:metric", api.deleteMetricHandler)
 	api.server.Get("/", api.notFound)
 
-	config.G.Log.API.LogDebug("API initialized, serving!")
+	config.G.Log.System.LogInfo("API initialized, serving!")
 	graceful.ListenAndServe(net.JoinHostPort(api.address, api.port), api.server)
 }
 
