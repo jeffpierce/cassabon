@@ -26,7 +26,7 @@ func (api *CassabonAPI) Start() {
 }
 
 func (api *CassabonAPI) Stop() {
-	config.G.Log.API.LogInfo("API received Stop command, gracefully shutting down.")
+	config.G.Log.System.LogInfo("API received Stop command, gracefully shutting down.")
 	graceful.Shutdown()
 	config.G.WG.Done()
 }
@@ -41,9 +41,11 @@ func (api *CassabonAPI) run() {
 	api.server.Get("/paths", api.pathsHandler)
 	api.server.Get("/metrics", api.metricsHandler)
 	api.server.Get("/healthcheck", api.healthHandler)
-	api.server.Delete("/remove/:path", api.deleteHandler)
+	api.server.Delete("/remove/path/:path", api.deletePathHandler)
+	api.server.Delete("/remove/metric/:metric", api.deleteMetricHandler)
 	api.server.Get("/", api.notFound)
 
+	config.G.Log.System.LogInfo("API initialized, serving!")
 	graceful.ListenAndServe(net.JoinHostPort(api.address, api.port), api.server)
 }
 
@@ -73,9 +75,14 @@ func (api *CassabonAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, string(health))
 }
 
-func (api *CassabonAPI) deleteHandler(c web.C, w http.ResponseWriter, r *http.Request) {
+func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *http.Request) {
 	// TODO:  Implement this in datastore.
 	fmt.Fprintf(w, "Not yet implemented, would have deleted %s", c.URLParams["path"])
+}
+
+func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *http.Request) {
+	// TODO:  Implement this in datastore.
+	fmt.Fprintf(w, "Not yet implemented, would have deleted %s", c.URLParams["metric"])
 }
 
 func (api *CassabonAPI) notFound(w http.ResponseWriter, r *http.Request) {
