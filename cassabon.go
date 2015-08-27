@@ -36,11 +36,11 @@ func main() {
 		logDir, _ := filepath.Abs(config.G.Log.Logdir)
 		config.G.Log.System = logging.NewLogger("system", filepath.Join(logDir, "cassabon.system.log"), sev)
 		config.G.Log.Carbon = logging.NewLogger("carbon", filepath.Join(logDir, "cassabon.carbon.log"), sev)
-		config.G.Log.API = logging.NewLogger("api", filepath.Join(logDir, "cassabon.api.log"), sev)
+		config.G.Log.API = logging.NewLogger("api", filepath.Join(logDir, "cassabon.api.log"), logging.Unclassified)
 	} else {
 		config.G.Log.System = logging.NewLogger("system", "", sev)
 		config.G.Log.Carbon = logging.NewLogger("carbon", "", sev)
-		config.G.Log.API = logging.NewLogger("api", "", sev)
+		config.G.Log.API = logging.NewLogger("api", "", logging.Unclassified)
 	}
 	defer config.G.Log.System.Close()
 	defer config.G.Log.Carbon.Close()

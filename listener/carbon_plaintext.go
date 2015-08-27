@@ -79,7 +79,7 @@ func (cpl *CarbonPlaintextListener) getTCPData(conn net.Conn) {
 	for scanner.Scan() {
 		cpl.metricHandler(scanner.Text())
 	}
-	config.G.Log.Carbon.LogDebug("Returning from getTCPData")
+	config.G.Log.System.LogDebug("Returning from getTCPData")
 }
 
 // carbonUDP listens for incoming Carbon UDP traffic and dispatches it.
@@ -162,7 +162,7 @@ func (cpl *CarbonPlaintextListener) getUDPData(buf string) {
 	for scanner.Scan() {
 		cpl.metricHandler(scanner.Text())
 	}
-	config.G.Log.Carbon.LogDebug("Returning from getUDPData")
+	config.G.Log.System.LogDebug("Returning from getUDPData")
 }
 
 // metricHandler reads, parses, and sends on a Carbon data packet.

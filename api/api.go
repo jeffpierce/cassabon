@@ -45,6 +45,8 @@ func (api *CassabonAPI) run() {
 	api.server.Delete("/remove/metric/:metric", api.deleteMetricHandler)
 	api.server.Get("/", api.notFound)
 
+	api.server.Use(requestLogger)
+
 	config.G.Log.System.LogInfo("API initialized, serving!")
 	graceful.ListenAndServe(net.JoinHostPort(api.address, api.port), api.server)
 }
