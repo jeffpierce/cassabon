@@ -14,7 +14,8 @@ type Severity int
 
 // The valid logging severities.
 const (
-	Debug Severity = iota
+	Unclassified Severity = iota
+	Debug
 	Info
 	Warn
 	Error
@@ -45,11 +46,12 @@ var loggers map[string]*FileLogger = map[string]*FileLogger{}
 
 // The text representations of the logging severities.
 var severityText = map[Severity]string{
-	Debug: "DEBUG",
-	Info:  "INFO",
-	Warn:  "WARN",
-	Error: "ERROR",
-	Fatal: "FATAL",
+	Unclassified: "",
+	Debug:        "DEBUG",
+	Info:         "INFO",
+	Warn:         "WARN",
+	Error:        "ERROR",
+	Fatal:        "FATAL",
 }
 
 // severityToText maps the severity value to a name for printing.
@@ -67,7 +69,9 @@ func TextToSeverity(s string) (Severity, error) {
 	var err error
 	switch strings.ToLower(s) {
 	case "":
-		sev = Debug
+		sev = Unclassified
+	case "unclassified":
+		sev = Unclassified
 	case "debug":
 		sev = Debug
 	case "info":
@@ -257,5 +261,9 @@ func (l *FileLogger) emit(sev Severity, format string, a ...interface{}) {
 		return
 	}
 
-	l.logger.Printf("["+l.logFacility+"] ["+severityToText(sev)+"] "+format, a...)
+	if l.logLevel == Unclassified {
+		l.logger.Printf("["+l.logFacility+"] "+format, a...)
+	} else {
+		l.logger.Printf("["+l.logFacility+"] ["+severityToText(sev)+"] "+format, a...)
+	}
 }
