@@ -34,9 +34,8 @@ $(TARBALL): $(DESTDIR)/$(TARGET)
 	tar czf $(TARBALL) -C $(DESTDIR) .
 
 upload: $(TARBALL)
-
 ifeq ($(UNAME), Darwin)
-	$(error $(UNAME) binaries are not valid in production; refusing to upload to S3.)
+	$(error $(UNAME) binaries are not valid in production; refusing to upload to S3)
 else
 	$(error Upload to S3 not implemented)
 endif
