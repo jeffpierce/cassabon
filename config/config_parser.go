@@ -31,7 +31,7 @@ type CassabonConfig struct {
 		Protocol string // "tcp", "udp" or "both" are acceptable
 	}
 	Statsd   StatsdSettings
-	Rollups  map[string][]string // Map of regex and default rollups
+	Rollups  map[string]RollupSettings // Map of regex and default rollups
 	Channels struct {
 		DataStoreChanLen int // Length of the DataStore channel
 		IndexerChanLen   int // Length of the Indexer channel
@@ -48,6 +48,12 @@ type CassabonConfig struct {
 			TodoChanLen       int
 		}
 	}
+}
+
+// Definition of each rollup
+type RollupSettings struct {
+	Retention   []string
+	Aggregation string
 }
 
 // Redis struct for redis connection information

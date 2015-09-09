@@ -46,3 +46,20 @@ redis:
         pwd: ""
         sentinel: false
         master: ""
+rollups:
+  foo\.*:
+    retention:
+      - 6s:30m
+      - 1m:30d
+      - 1h:1y
+    aggregation: average
+  bar\.*:
+    retention:
+      - 10s:1h
+      - 1m:30d
+    aggregation: max
+  default:
+    retention:
+      - 15s:1d
+      - 1h:30d
+    aggregation: average
