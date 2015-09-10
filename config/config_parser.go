@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"io/ioutil"
 	"regexp"
 	"sort"
@@ -86,91 +85,98 @@ type StatsdSettings struct {
 	}
 }
 
-// Get Rollup Settings
-func parseConfig(configFile string) *CassabonConfig {
+// rawCassabonConfig is the decoded YAML from the configuration file.
+var rawCassabonConfig *CassabonConfig
+
+func ReadConfigurationFile(configFile string, haveLogger bool) error {
 
 	// Load config file.
 	// This happens before the logger is initialized because we also read in
 	// logger configuration, causing a cycle. So, we panic on errors.
 	yamlConfig, err := ioutil.ReadFile(configFile)
-
 	if err != nil {
-		panic(err)
+		if haveLogger {
+			G.Log.System.LogError("Configuration not available: %v", err)
+			return err
+		} else {
+			panic(err)
+		}
 	}
 
-	// Initialize config struct
-	var config *CassabonConfig
-
-	// Unmarshal config file into config struct
-	err = yaml.Unmarshal(yamlConfig, &config)
-
+	// Unmarshal config file into config struct.
+	err = yaml.Unmarshal(yamlConfig, &rawCassabonConfig)
 	if err != nil {
-		panic(err)
+		if haveLogger {
+			G.Log.System.LogError("Configuration parse error: %v", err)
+			return err
+		} else {
+			panic(err)
+		}
 	}
-
-	// Send back config struct
-	return config
+	return nil
 }
 
-func GetConfiguration(confFile string) {
-
-	// Open, read, and parse the YAML.
-	cnf := parseConfig(confFile)
+func ParseStartupValues() {
 
 	// Fill in arguments not provided on the command line.
 	if G.Log.Logdir == "" {
-		G.Log.Logdir = cnf.Logging.Logdir
+		G.Log.Logdir = rawCassabonConfig.Logging.Logdir
 	}
 	if G.Log.Loglevel == "" {
-		G.Log.Loglevel = cnf.Logging.Loglevel
+		G.Log.Loglevel = rawCassabonConfig.Logging.Loglevel
 	}
 
-	// Copy in values sourced solely from the configuration file.
-	G.Statsd = cnf.Statsd
-
-	G.API.Address = cnf.API.Address
-	G.API.Port = cnf.API.Port
-	G.API.HealthCheckFile = cnf.API.HealthCheckFile
-
-	G.Redis.Index = cnf.Redis.Index
-	G.Redis.Queue = cnf.Redis.Queue
-
-	G.Carbon.Address = cnf.Carbon.Address
-	G.Carbon.Port = cnf.Carbon.Port
-	G.Carbon.Protocol = cnf.Carbon.Protocol
+	// Copy in the statsd configuration.
+	G.Statsd = rawCassabonConfig.Statsd
 
 	// Copy in and sanitize the channel lengths.
-	G.Channels.DataStoreChanLen = cnf.Channels.DataStoreChanLen
+	G.Channels.DataStoreChanLen = rawCassabonConfig.Channels.DataStoreChanLen
 	if G.Channels.DataStoreChanLen < 10 {
 		G.Channels.DataStoreChanLen = 10
 	}
 	if G.Channels.DataStoreChanLen > 1000 {
 		G.Channels.DataStoreChanLen = 1000
 	}
-	G.Channels.IndexerChanLen = cnf.Channels.IndexerChanLen
+	G.Channels.IndexerChanLen = rawCassabonConfig.Channels.IndexerChanLen
 	if G.Channels.IndexerChanLen < 10 {
 		G.Channels.IndexerChanLen = 10
 	}
 	if G.Channels.IndexerChanLen > 1000 {
 		G.Channels.IndexerChanLen = 1000
 	}
-	G.Channels.GopherChanLen = cnf.Channels.GopherChanLen
+	G.Channels.GopherChanLen = rawCassabonConfig.Channels.GopherChanLen
 	if G.Channels.GopherChanLen < 10 {
 		G.Channels.GopherChanLen = 10
 	}
 	if G.Channels.GopherChanLen > 1000 {
 		G.Channels.GopherChanLen = 1000
 	}
+}
+
+func ParseRefreshableValues() {
+
+	// Copy in the addresses of the services we offer.
+	G.API.Address = rawCassabonConfig.API.Address
+	G.API.Port = rawCassabonConfig.API.Port
+	G.API.HealthCheckFile = rawCassabonConfig.API.HealthCheckFile
+
+	G.Carbon.Address = rawCassabonConfig.Carbon.Address
+	G.Carbon.Port = rawCassabonConfig.Carbon.Port
+	G.Carbon.Protocol = rawCassabonConfig.Carbon.Protocol
+
+	// Copy in the addresses of the services we use.
+	G.Redis.Index = rawCassabonConfig.Redis.Index
+	G.Redis.Queue = rawCassabonConfig.Redis.Queue
 
 	// Copy in and sanitize the Listener internal parameters.
-	G.Parameters.Listener.TCPTimeout = cnf.Parameters.Listener.TCPTimeout
+	G.Parameters.Listener.TCPTimeout = rawCassabonConfig.Parameters.Listener.TCPTimeout
 	if G.Parameters.Listener.TCPTimeout < 1 {
 		G.Parameters.Listener.TCPTimeout = 1
 	}
 	if G.Parameters.Listener.TCPTimeout > 30 {
 		G.Parameters.Listener.TCPTimeout = 30
 	}
-	G.Parameters.Listener.UDPTimeout = cnf.Parameters.Listener.UDPTimeout
+	G.Parameters.Listener.UDPTimeout = rawCassabonConfig.Parameters.Listener.UDPTimeout
 	if G.Parameters.Listener.UDPTimeout < 1 {
 		G.Parameters.Listener.UDPTimeout = 1
 	}
@@ -179,21 +185,21 @@ func GetConfiguration(confFile string) {
 	}
 
 	// Copy in and sanitize the DataStore internal parameters.
-	G.Parameters.DataStore.MaxPendingMetrics = cnf.Parameters.DataStore.MaxPendingMetrics
+	G.Parameters.DataStore.MaxPendingMetrics = rawCassabonConfig.Parameters.DataStore.MaxPendingMetrics
 	if G.Parameters.DataStore.MaxPendingMetrics < 1 {
 		G.Parameters.DataStore.MaxPendingMetrics = 1
 	}
 	if G.Parameters.DataStore.MaxPendingMetrics > 500 {
 		G.Parameters.DataStore.MaxPendingMetrics = 500
 	}
-	G.Parameters.DataStore.MaxFlushDelay = cnf.Parameters.DataStore.MaxFlushDelay
+	G.Parameters.DataStore.MaxFlushDelay = rawCassabonConfig.Parameters.DataStore.MaxFlushDelay
 	if G.Parameters.DataStore.MaxFlushDelay < 1 {
 		G.Parameters.DataStore.MaxFlushDelay = 1
 	}
 	if G.Parameters.DataStore.MaxFlushDelay > 30 {
 		G.Parameters.DataStore.MaxFlushDelay = 30
 	}
-	G.Parameters.DataStore.TodoChanLen = cnf.Parameters.DataStore.TodoChanLen
+	G.Parameters.DataStore.TodoChanLen = rawCassabonConfig.Parameters.DataStore.TodoChanLen
 	if G.Parameters.DataStore.TodoChanLen < 5 {
 		G.Parameters.DataStore.TodoChanLen = 5
 	}
@@ -202,7 +208,7 @@ func GetConfiguration(confFile string) {
 	}
 
 	// Validate, copy in and normalize the rollup definitions.
-	G.RollupPriority = make([]string, 0, len(cnf.Rollups))
+	G.RollupPriority = make([]string, 0, len(rawCassabonConfig.Rollups))
 	G.Rollup = make(map[string]*RollupDef)
 
 	var method RollupMethod
@@ -214,7 +220,7 @@ func GetConfiguration(confFile string) {
 
 	// Inspect each rollup found in the configuration.
 	// Note: YAML decode has already folded duplicate path expressions.
-	for expression, v := range cnf.Rollups {
+	for expression, v := range rawCassabonConfig.Rollups {
 
 		// Validate and decode the aggregation method.
 		switch strings.ToLower(v.Aggregation) {
@@ -227,7 +233,7 @@ func GetConfiguration(confFile string) {
 		case "sum":
 			method = Sum
 		default:
-			fmt.Printf("invalid aggregation method for \"%s\": %s\n", expression, v.Aggregation)
+			G.Log.System.LogWarn("Invalid aggregation method for \"%s\": %s", expression, v.Aggregation)
 			continue
 		}
 
@@ -243,13 +249,13 @@ func GetConfiguration(confFile string) {
 			// Split the value on the colon between the parts.
 			couplet := strings.Split(s, ":")
 			if len(couplet) != 2 {
-				fmt.Printf("malformed definition for \"%s\": %s\n", expression, s)
+				G.Log.System.LogWarn("Malformed definition for \"%s\": %s", expression, s)
 				continue
 			}
 
 			// Convert the window to a time.Duration.
 			if window, err = time.ParseDuration(couplet[0]); err != nil {
-				fmt.Printf("malformed window for \"%s\": %s %s\n", expression, s, couplet[0])
+				G.Log.System.LogWarn("Malformed window for \"%s\": %s %s", expression, s, couplet[0])
 				continue
 			}
 
@@ -257,11 +263,11 @@ func GetConfiguration(confFile string) {
 			// ParseDuration doesn't handle anything longer than hours, so do it manually.
 			matches := re.FindStringSubmatch(couplet[1]) // "1d" -> [ 1d 1 d ]
 			if len(matches) != 3 {
-				fmt.Printf("malformed retention for \"%s\": %s %s\n", expression, s, couplet[1])
+				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
 				continue
 			}
 			if intRetention, err = strconv.ParseInt(matches[1], 10, 64); err != nil {
-				fmt.Printf("malformed retention for \"%s\": %s %s\n", expression, s, couplet[1])
+				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
 				continue
 			}
 			switch matches[2] {
@@ -276,7 +282,7 @@ func GetConfiguration(confFile string) {
 			case "y":
 				retention = time.Hour * 24 * 365 * time.Duration(intRetention)
 			default:
-				fmt.Printf("malformed retention for \"%s\": %s %s\n", expression, s, couplet[1])
+				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
 				continue
 			}
 
