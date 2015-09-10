@@ -1,7 +1,13 @@
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
 	"gopkg.in/yaml.v2"
 )
@@ -31,7 +37,7 @@ type CassabonConfig struct {
 		Protocol string // "tcp", "udp" or "both" are acceptable
 	}
 	Statsd   StatsdSettings
-	Rollups  map[string]RollupSettings // Map of regex and default rollups
+	Rollups  map[string]RollupSettings // Map of regex and rollups
 	Channels struct {
 		DataStoreChanLen int // Length of the DataStore channel
 		IndexerChanLen   int // Length of the Indexer channel
@@ -194,4 +200,139 @@ func GetConfiguration(confFile string) {
 	if G.Parameters.DataStore.TodoChanLen > 100 {
 		G.Parameters.DataStore.TodoChanLen = 100
 	}
+
+	// Validate, copy in and normalize the rollup definitions.
+	G.RollupPriority = make([]string, 0, len(cnf.Rollups))
+	G.Rollup = make(map[string]*RollupDef)
+
+	var method RollupMethod
+	var window, retention time.Duration
+	var err error
+	var intRetention int64
+	var rd *RollupDef
+	re := regexp.MustCompile("([0-9]+)([a-z])")
+
+	// Inspect each rollup found in the configuration.
+	// Note: YAML decode has already folded duplicate path expressions.
+	for expression, v := range cnf.Rollups {
+
+		// Validate and decode the aggregation method.
+		switch strings.ToLower(v.Aggregation) {
+		case "average":
+			method = Average
+		case "max":
+			method = Max
+		case "min":
+			method = Min
+		case "sum":
+			method = Sum
+		default:
+			fmt.Printf("invalid aggregation method for \"%s\": %s\n", expression, v.Aggregation)
+			continue
+		}
+
+		// Record the regular expression and its aggregation method.
+		G.RollupPriority = append(G.RollupPriority, expression)
+		rd = new(RollupDef)
+		rd.Method = method
+		rd.Windows = make([]RollupWindow, 0)
+
+		// Parse and validate each window:retention pair.
+		for _, s := range v.Retention {
+
+			// Split the value on the colon between the parts.
+			couplet := strings.Split(s, ":")
+			if len(couplet) != 2 {
+				fmt.Printf("malformed definition for \"%s\": %s\n", expression, s)
+				continue
+			}
+
+			// Convert the window to a time.Duration.
+			if window, err = time.ParseDuration(couplet[0]); err != nil {
+				fmt.Printf("malformed window for \"%s\": %s %s\n", expression, s, couplet[0])
+				continue
+			}
+
+			// Convert the retention to a time.Duration (max: 720 years).
+			// ParseDuration doesn't handle anything longer than hours, so do it manually.
+			matches := re.FindStringSubmatch(couplet[1]) // "1d" -> [ 1d 1 d ]
+			if len(matches) != 3 {
+				fmt.Printf("malformed retention for \"%s\": %s %s\n", expression, s, couplet[1])
+				continue
+			}
+			if intRetention, err = strconv.ParseInt(matches[1], 10, 64); err != nil {
+				fmt.Printf("malformed retention for \"%s\": %s %s\n", expression, s, couplet[1])
+				continue
+			}
+			switch matches[2] {
+			case "m":
+				retention = time.Minute * time.Duration(intRetention)
+			case "h":
+				retention = time.Hour * time.Duration(intRetention)
+			case "d":
+				retention = time.Hour * 24 * time.Duration(intRetention)
+			case "w":
+				retention = time.Hour * 24 * 7 * time.Duration(intRetention)
+			case "y":
+				retention = time.Hour * 24 * 365 * time.Duration(intRetention)
+			default:
+				fmt.Printf("malformed retention for \"%s\": %s %s\n", expression, s, couplet[1])
+				continue
+			}
+
+			// Append to the rollups for this expression.
+			rd.Windows = append(rd.Windows, RollupWindow{window, retention})
+			if rd.MaxWindow < window {
+				rd.MaxWindow = window
+			}
+		}
+		sort.Sort(ByWindow(rd.Windows))
+		G.Rollup[expression] = rd
+	}
+
+	// Sort the path expressions into priority order.
+	sort.Sort(ByPriority(G.RollupPriority))
+}
+
+// ByWindow is used to sort retention definitions by window duration.
+type ByWindow []RollupWindow
+
+// Implementation of sort.Interface.
+func (w ByWindow) Len() int {
+	return len(w)
+}
+func (w ByWindow) Swap(i, j int) {
+	w[i], w[j] = w[j], w[i]
+}
+func (w ByWindow) Less(i, j int) bool {
+	return w[i].Window < w[j].Window
+}
+
+// ByPriority is used to provide a consistent order for processing path expressions.
+type ByPriority []string
+
+// Implementation of sort.Interface.
+func (p ByPriority) Len() int {
+	return len(p)
+}
+func (p ByPriority) Swap(i, j int) {
+	p[i], p[j] = p[j], p[i]
+}
+func (p ByPriority) Less(i, j int) bool {
+
+	// "default" is always last in priority.
+	if p[i] == "default" {
+		return false
+	}
+	if p[j] == "default" {
+		return true
+	}
+
+	// Longer strings are higher priority.
+	if len(p[i]) > len(p[j]) {
+		return true
+	}
+
+	// Same-length strings are ordered lexically.
+	return p[i] < p[j]
 }

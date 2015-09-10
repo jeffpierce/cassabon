@@ -2,6 +2,7 @@ package config
 
 import (
 	"sync"
+	"time"
 
 	"github.com/jeffpierce/cassabon/logging"
 )
@@ -16,6 +17,30 @@ type CarbonMetric struct {
 type IndexQuery struct {
 	Query   string      // Query
 	Channel chan []byte // Channel to send response back on.
+}
+
+// RollupMethod is the way in which data points are combined in a time interval.
+type RollupMethod int
+
+// The valid rollup methods.
+const (
+	Average RollupMethod = iota
+	Max
+	Min
+	Sum
+)
+
+// RollupWindow is the definition of one rollup interval.
+type RollupWindow struct {
+	Window    time.Duration
+	Retention time.Duration
+}
+
+// RollupDef is the definition of how to process a path expression.
+type RollupDef struct {
+	Method    RollupMethod
+	MaxWindow time.Duration
+	Windows   []RollupWindow
 }
 
 // The globally accessible configuration and state object.
@@ -69,8 +94,11 @@ type Globals struct {
 		Protocol string // "tcp", "udp" or "both" are acceptable
 	}
 
+	// Configuration of data point aggregations.
+	RollupPriority []string              // First matched expression wins
+	Rollup         map[string]*RollupDef // Rollup processing definitions by path expression
+
 	// Configuration of internal elements.
-	Rollups    map[string][]string // Map of regex and default rollups
 	Parameters struct {
 		Listener struct {
 			TCPTimeout int
