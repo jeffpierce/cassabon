@@ -27,7 +27,8 @@ func main() {
 
 	// Fill in startup values not provided on the command line, if available.
 	if confFile != "" {
-		config.GetConfiguration(confFile)
+		config.ReadConfigurationFile(confFile, false)
+		config.ParseStartupValues()
 	}
 
 	// Set up logging.
@@ -50,6 +51,12 @@ func main() {
 	config.G.Log.System.LogInfo("Startup in progress")
 	if errLogLevel != nil {
 		config.G.Log.System.LogWarn("Bad command line argument: %v", errLogLevel)
+	}
+
+	// Now that we have a logger, parse the rest of the configuration.
+	if confFile != "" {
+		config.G.Log.System.LogInfo("Reading configuration file %s", confFile)
+		config.ParseRefreshableValues()
 	}
 
 	// Set up stats reporting.
@@ -80,13 +87,15 @@ func main() {
 	for repeat {
 
 		// Perform initialization that is repeated on every SIGHUP.
-		config.G.Log.System.LogInfo("Reading configuration file %s", confFile)
 		config.G.QuitMain = make(chan struct{}, 1)
 		config.G.QuitListener = make(chan struct{}, 1)
 
 		// Re-read the configuration to get any updated values.
 		if configIsStale && confFile != "" {
-			config.GetConfiguration(confFile)
+			config.G.Log.System.LogInfo("Reading configuration file %s", confFile)
+			if err := config.ReadConfigurationFile(confFile, true); err == nil {
+				config.ParseRefreshableValues()
+			}
 		}
 
 		// Start the StoreManager.

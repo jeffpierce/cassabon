@@ -2,6 +2,11 @@ package config
 
 import (
 	"io/ioutil"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
 	"gopkg.in/yaml.v2"
 )
@@ -31,7 +36,7 @@ type CassabonConfig struct {
 		Protocol string // "tcp", "udp" or "both" are acceptable
 	}
 	Statsd   StatsdSettings
-	Rollups  map[string][]string // Map of regex and default rollups
+	Rollups  map[string]RollupSettings // Map of regex and rollups
 	Channels struct {
 		DataStoreChanLen int // Length of the DataStore channel
 		IndexerChanLen   int // Length of the Indexer channel
@@ -48,6 +53,12 @@ type CassabonConfig struct {
 			TodoChanLen       int
 		}
 	}
+}
+
+// Definition of each rollup
+type RollupSettings struct {
+	Retention   []string
+	Aggregation string
 }
 
 // Redis struct for redis connection information
@@ -74,91 +85,98 @@ type StatsdSettings struct {
 	}
 }
 
-// Get Rollup Settings
-func parseConfig(configFile string) *CassabonConfig {
+// rawCassabonConfig is the decoded YAML from the configuration file.
+var rawCassabonConfig *CassabonConfig
+
+func ReadConfigurationFile(configFile string, haveLogger bool) error {
 
 	// Load config file.
 	// This happens before the logger is initialized because we also read in
 	// logger configuration, causing a cycle. So, we panic on errors.
 	yamlConfig, err := ioutil.ReadFile(configFile)
-
 	if err != nil {
-		panic(err)
+		if haveLogger {
+			G.Log.System.LogError("Configuration not available: %v", err)
+			return err
+		} else {
+			panic(err)
+		}
 	}
 
-	// Initialize config struct
-	var config *CassabonConfig
-
-	// Unmarshal config file into config struct
-	err = yaml.Unmarshal(yamlConfig, &config)
-
+	// Unmarshal config file into config struct.
+	err = yaml.Unmarshal(yamlConfig, &rawCassabonConfig)
 	if err != nil {
-		panic(err)
+		if haveLogger {
+			G.Log.System.LogError("Configuration parse error: %v", err)
+			return err
+		} else {
+			panic(err)
+		}
 	}
-
-	// Send back config struct
-	return config
+	return nil
 }
 
-func GetConfiguration(confFile string) {
-
-	// Open, read, and parse the YAML.
-	cnf := parseConfig(confFile)
+func ParseStartupValues() {
 
 	// Fill in arguments not provided on the command line.
 	if G.Log.Logdir == "" {
-		G.Log.Logdir = cnf.Logging.Logdir
+		G.Log.Logdir = rawCassabonConfig.Logging.Logdir
 	}
 	if G.Log.Loglevel == "" {
-		G.Log.Loglevel = cnf.Logging.Loglevel
+		G.Log.Loglevel = rawCassabonConfig.Logging.Loglevel
 	}
 
-	// Copy in values sourced solely from the configuration file.
-	G.Statsd = cnf.Statsd
-
-	G.API.Address = cnf.API.Address
-	G.API.Port = cnf.API.Port
-	G.API.HealthCheckFile = cnf.API.HealthCheckFile
-
-	G.Redis.Index = cnf.Redis.Index
-	G.Redis.Queue = cnf.Redis.Queue
-
-	G.Carbon.Address = cnf.Carbon.Address
-	G.Carbon.Port = cnf.Carbon.Port
-	G.Carbon.Protocol = cnf.Carbon.Protocol
+	// Copy in the statsd configuration.
+	G.Statsd = rawCassabonConfig.Statsd
 
 	// Copy in and sanitize the channel lengths.
-	G.Channels.DataStoreChanLen = cnf.Channels.DataStoreChanLen
+	G.Channels.DataStoreChanLen = rawCassabonConfig.Channels.DataStoreChanLen
 	if G.Channels.DataStoreChanLen < 10 {
 		G.Channels.DataStoreChanLen = 10
 	}
 	if G.Channels.DataStoreChanLen > 1000 {
 		G.Channels.DataStoreChanLen = 1000
 	}
-	G.Channels.IndexerChanLen = cnf.Channels.IndexerChanLen
+	G.Channels.IndexerChanLen = rawCassabonConfig.Channels.IndexerChanLen
 	if G.Channels.IndexerChanLen < 10 {
 		G.Channels.IndexerChanLen = 10
 	}
 	if G.Channels.IndexerChanLen > 1000 {
 		G.Channels.IndexerChanLen = 1000
 	}
-	G.Channels.GopherChanLen = cnf.Channels.GopherChanLen
+	G.Channels.GopherChanLen = rawCassabonConfig.Channels.GopherChanLen
 	if G.Channels.GopherChanLen < 10 {
 		G.Channels.GopherChanLen = 10
 	}
 	if G.Channels.GopherChanLen > 1000 {
 		G.Channels.GopherChanLen = 1000
 	}
+}
+
+func ParseRefreshableValues() {
+
+	// Copy in the addresses of the services we offer.
+	G.API.Address = rawCassabonConfig.API.Address
+	G.API.Port = rawCassabonConfig.API.Port
+	G.API.HealthCheckFile = rawCassabonConfig.API.HealthCheckFile
+
+	G.Carbon.Address = rawCassabonConfig.Carbon.Address
+	G.Carbon.Port = rawCassabonConfig.Carbon.Port
+	G.Carbon.Protocol = rawCassabonConfig.Carbon.Protocol
+
+	// Copy in the addresses of the services we use.
+	G.Redis.Index = rawCassabonConfig.Redis.Index
+	G.Redis.Queue = rawCassabonConfig.Redis.Queue
 
 	// Copy in and sanitize the Listener internal parameters.
-	G.Parameters.Listener.TCPTimeout = cnf.Parameters.Listener.TCPTimeout
+	G.Parameters.Listener.TCPTimeout = rawCassabonConfig.Parameters.Listener.TCPTimeout
 	if G.Parameters.Listener.TCPTimeout < 1 {
 		G.Parameters.Listener.TCPTimeout = 1
 	}
 	if G.Parameters.Listener.TCPTimeout > 30 {
 		G.Parameters.Listener.TCPTimeout = 30
 	}
-	G.Parameters.Listener.UDPTimeout = cnf.Parameters.Listener.UDPTimeout
+	G.Parameters.Listener.UDPTimeout = rawCassabonConfig.Parameters.Listener.UDPTimeout
 	if G.Parameters.Listener.UDPTimeout < 1 {
 		G.Parameters.Listener.UDPTimeout = 1
 	}
@@ -167,25 +185,160 @@ func GetConfiguration(confFile string) {
 	}
 
 	// Copy in and sanitize the DataStore internal parameters.
-	G.Parameters.DataStore.MaxPendingMetrics = cnf.Parameters.DataStore.MaxPendingMetrics
+	G.Parameters.DataStore.MaxPendingMetrics = rawCassabonConfig.Parameters.DataStore.MaxPendingMetrics
 	if G.Parameters.DataStore.MaxPendingMetrics < 1 {
 		G.Parameters.DataStore.MaxPendingMetrics = 1
 	}
 	if G.Parameters.DataStore.MaxPendingMetrics > 500 {
 		G.Parameters.DataStore.MaxPendingMetrics = 500
 	}
-	G.Parameters.DataStore.MaxFlushDelay = cnf.Parameters.DataStore.MaxFlushDelay
+	G.Parameters.DataStore.MaxFlushDelay = rawCassabonConfig.Parameters.DataStore.MaxFlushDelay
 	if G.Parameters.DataStore.MaxFlushDelay < 1 {
 		G.Parameters.DataStore.MaxFlushDelay = 1
 	}
 	if G.Parameters.DataStore.MaxFlushDelay > 30 {
 		G.Parameters.DataStore.MaxFlushDelay = 30
 	}
-	G.Parameters.DataStore.TodoChanLen = cnf.Parameters.DataStore.TodoChanLen
+	G.Parameters.DataStore.TodoChanLen = rawCassabonConfig.Parameters.DataStore.TodoChanLen
 	if G.Parameters.DataStore.TodoChanLen < 5 {
 		G.Parameters.DataStore.TodoChanLen = 5
 	}
 	if G.Parameters.DataStore.TodoChanLen > 100 {
 		G.Parameters.DataStore.TodoChanLen = 100
 	}
+
+	// Validate, copy in and normalize the rollup definitions.
+	G.RollupPriority = make([]string, 0, len(rawCassabonConfig.Rollups))
+	G.Rollup = make(map[string]RollupDef)
+
+	var method RollupMethod
+	var window, retention time.Duration
+	var err error
+	var intRetention int64
+	var rd *RollupDef
+	re := regexp.MustCompile("([0-9]+)([a-z])")
+
+	// Inspect each rollup found in the configuration.
+	// Note: YAML decode has already folded duplicate path expressions.
+	for expression, v := range rawCassabonConfig.Rollups {
+
+		// Validate and decode the aggregation method.
+		switch strings.ToLower(v.Aggregation) {
+		case "average":
+			method = Average
+		case "max":
+			method = Max
+		case "min":
+			method = Min
+		case "sum":
+			method = Sum
+		default:
+			G.Log.System.LogWarn("Invalid aggregation method for \"%s\": %s", expression, v.Aggregation)
+			continue
+		}
+
+		// Record the regular expression and its aggregation method.
+		G.RollupPriority = append(G.RollupPriority, expression)
+		rd = new(RollupDef)
+		rd.Method = method
+		rd.Windows = make([]RollupWindow, 0)
+
+		// Parse and validate each window:retention pair.
+		for _, s := range v.Retention {
+
+			// Split the value on the colon between the parts.
+			couplet := strings.Split(s, ":")
+			if len(couplet) != 2 {
+				G.Log.System.LogWarn("Malformed definition for \"%s\": %s", expression, s)
+				continue
+			}
+
+			// Convert the window to a time.Duration.
+			if window, err = time.ParseDuration(couplet[0]); err != nil {
+				G.Log.System.LogWarn("Malformed window for \"%s\": %s %s", expression, s, couplet[0])
+				continue
+			}
+
+			// Convert the retention to a time.Duration (max: 720 years).
+			// ParseDuration doesn't handle anything longer than hours, so do it manually.
+			matches := re.FindStringSubmatch(couplet[1]) // "1d" -> [ 1d 1 d ]
+			if len(matches) != 3 {
+				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
+				continue
+			}
+			if intRetention, err = strconv.ParseInt(matches[1], 10, 64); err != nil {
+				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
+				continue
+			}
+			switch matches[2] {
+			case "m":
+				retention = time.Minute * time.Duration(intRetention)
+			case "h":
+				retention = time.Hour * time.Duration(intRetention)
+			case "d":
+				retention = time.Hour * 24 * time.Duration(intRetention)
+			case "w":
+				retention = time.Hour * 24 * 7 * time.Duration(intRetention)
+			case "y":
+				retention = time.Hour * 24 * 365 * time.Duration(intRetention)
+			default:
+				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
+				continue
+			}
+
+			// Append to the rollups for this expression.
+			rd.Windows = append(rd.Windows, RollupWindow{window, retention})
+			if rd.MaxWindow < window {
+				rd.MaxWindow = window
+			}
+		}
+		sort.Sort(ByWindow(rd.Windows))
+		G.Rollup[expression] = *rd
+	}
+
+	// Sort the path expressions into priority order.
+	sort.Sort(ByPriority(G.RollupPriority))
+}
+
+// ByWindow is used to sort retention definitions by window duration.
+type ByWindow []RollupWindow
+
+// Implementation of sort.Interface.
+func (w ByWindow) Len() int {
+	return len(w)
+}
+func (w ByWindow) Swap(i, j int) {
+	w[i], w[j] = w[j], w[i]
+}
+func (w ByWindow) Less(i, j int) bool {
+	return w[i].Window < w[j].Window
+}
+
+// ByPriority is used to provide a consistent order for processing path expressions.
+type ByPriority []string
+
+// Implementation of sort.Interface.
+func (p ByPriority) Len() int {
+	return len(p)
+}
+func (p ByPriority) Swap(i, j int) {
+	p[i], p[j] = p[j], p[i]
+}
+func (p ByPriority) Less(i, j int) bool {
+
+	// "default" is always last in priority.
+	if p[i] == "default" {
+		return false
+	}
+	if p[j] == "default" {
+		return true
+	}
+
+	// Longer strings are higher priority.
+	if len(p[i]) > len(p[j]) {
+		return true
+	}
+
+	// Same-length strings are ordered lexically.
+	return p[i] < p[j]
 }

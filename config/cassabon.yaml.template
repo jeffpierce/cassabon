@@ -11,7 +11,7 @@ statsd:
     events:
         receiveok:
             key: "cassabon.carbon.received.success"
-            samplerate: 0.1
+            samplerate: 1.0
         receivefail:
             key: "cassabon.carbon.received.failure"
             samplerate: 1.0
@@ -46,3 +46,47 @@ redis:
         pwd: ""
         sentinel: false
         master: ""
+rollups:
+  ^foo2\.*:
+    retention:
+      - 6s:30m
+      - 1m:30d
+      - 1h:1y
+    aggregation: average
+  ^foo1\.*:
+    retention:
+      - 1m:30d
+      - 1h:1y
+      - 6s:30m
+    aggregation: sum
+  ^bar\.*:
+    retention:
+      - 10s:1h
+      - 1m:30d
+    aggregation: max
+  ^bar\.baz\.*:
+    retention:
+      - 10s:1h
+      - 1m:30d
+    aggregation: min
+  ^bar\.quux\.*:
+    retention:
+      - 10s:1h
+      - 1m:30d
+    aggregation: max
+  ^bar\.zoom1\.*:
+    retention:
+      - 10s:1h
+    aggregation: garbage
+  ^bar\.zoom2\.*:
+    retention:
+      - 10q:1h
+    aggregation: sum
+  default:
+    retention:
+      - 15s:1d
+      - 15s-1d
+      - 1h:30d
+      - 1h:3w
+      - 1h:3z
+    aggregation: average
