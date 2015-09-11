@@ -16,8 +16,9 @@ statsd:
             key: "cassabon.carbon.received.failure"
             samplerate: 1.0
 channels:
-    dataStorechanlen: 10
-    indexerchanlen: 10
+    datastorechanlen: 10
+    statstorechanlen: 10
+    indexstorechanlen: 10
     gopherchanlen: 100
 api:
     address: "127.0.0.1"

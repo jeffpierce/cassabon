@@ -7,7 +7,6 @@ import (
 )
 
 type StoreManager struct {
-	todo       chan config.CarbonMetric
 	setTimeout chan time.Duration // Write a duration to this to get a notification on timeout channel
 	timeout    chan struct{}      // Timeout notifications arrive on this channel
 }
@@ -15,21 +14,46 @@ type StoreManager struct {
 func (sm *StoreManager) Init() {
 
 	// Initialize private objects.
-	sm.todo = make(chan config.CarbonMetric, config.G.Parameters.DataStore.TodoChanLen)
 	sm.setTimeout = make(chan time.Duration, 0)
 	sm.timeout = make(chan struct{}, 1)
-}
 
-func (sm *StoreManager) Start() {
-
-	// Start the goroutines.
-	config.G.OnReload2WG.Add(3)
+	// Start the persistent goroutines.
+	config.G.OnExitWG.Add(1)
 	go sm.timer()
-	go sm.insert()
-	go sm.run()
 
 	// Kick off the timer.
 	sm.setTimeout <- time.Duration(config.G.Parameters.DataStore.MaxFlushDelay) * time.Second
+}
+
+func (sm *StoreManager) Start() {
+	config.G.OnReload2WG.Add(2)
+	go sm.insert()
+	go sm.run()
+}
+
+// timer sends a message on the "timeout" channel after the specified duration.
+func (sm *StoreManager) timer() {
+	for {
+		select {
+		case <-config.G.OnExit:
+			config.G.Log.System.LogDebug("StoreManager::timer received QUIT message")
+			config.G.OnExitWG.Done()
+			return
+		case duration := <-sm.setTimeout:
+			// Block in this state until a new entry is received.
+			select {
+			case <-config.G.OnExit:
+				// Nothing; do handling above on next iteration.
+			case <-time.After(duration):
+				select {
+				case sm.timeout <- struct{}{}:
+					// Timeout sent.
+				default:
+					// Do not block.
+				}
+			}
+		}
+	}
 }
 
 func (sm *StoreManager) run() {
@@ -46,11 +70,11 @@ func (sm *StoreManager) run() {
 		case metric := <-config.G.Channels.DataStore:
 			config.G.Log.System.LogDebug("StoreManager received metric: %v", metric)
 
-			// Send the path off to the indexer.
-			config.G.Channels.Indexer <- metric
+			// Send the entry off for writing to the path index.
+			config.G.Channels.IndexStore <- metric
 
-			// Accumulate the entry for writing to Cassandra.
-			sm.todo <- metric
+			// Send the entry off for writing to the stats store.
+			config.G.Channels.StatStore <- metric
 		}
 	}
 }
@@ -64,7 +88,7 @@ func (sm *StoreManager) insert() {
 			sm.flush()
 			config.G.OnReload2WG.Done()
 			return
-		case metric := <-sm.todo:
+		case metric := <-config.G.Channels.StatStore:
 			config.G.Log.System.LogDebug("StoreManager::insert received metric: %v", metric)
 			sm.accumulate(metric)
 		case <-sm.timeout:
@@ -75,31 +99,6 @@ func (sm *StoreManager) insert() {
 				// Notification sent
 			default:
 				// Do not block if channel is at capacity
-			}
-		}
-	}
-}
-
-// timeout sends a message on the "timeout" channel after the specified duration.
-func (sm *StoreManager) timer() {
-	for {
-		select {
-		case <-config.G.OnReload2:
-			config.G.Log.System.LogDebug("StoreManager::timer received QUIT message")
-			config.G.OnReload2WG.Done()
-			return
-		case duration := <-sm.setTimeout:
-			// Block in this state until a new entry is received.
-			select {
-			case <-config.G.OnReload2:
-				// Nothing; do handling above on next iteration.
-			case <-time.After(duration):
-				select {
-				case sm.timeout <- struct{}{}:
-					// Timeout sent.
-				default:
-					// Do not block.
-				}
 			}
 		}
 	}

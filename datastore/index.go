@@ -62,7 +62,7 @@ func (indexer *MetricsIndexer) run() {
 			config.G.Log.System.LogDebug("Indexer::run received QUIT message")
 			config.G.OnReload2WG.Done()
 			return
-		case metric := <-config.G.Channels.Indexer:
+		case metric := <-config.G.Channels.IndexStore:
 			config.G.Log.System.LogDebug("Indexer received metric: %v", metric)
 			go indexer.indexMetricPath(metric.Path)
 		}

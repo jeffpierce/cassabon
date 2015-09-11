@@ -38,9 +38,10 @@ type CassabonConfig struct {
 	Statsd   StatsdSettings
 	Rollups  map[string]RollupSettings // Map of regex and rollups
 	Channels struct {
-		DataStoreChanLen int // Length of the DataStore channel
-		IndexerChanLen   int // Length of the Indexer channel
-		GopherChanLen    int // Length of the StatGopher channel
+		DataStoreChanLen  int // Length of the DataStore channel
+		StatStoreChanLen  int // Length of the StatStore channel
+		IndexStoreChanLen int // Length of the Indexer channel
+		GopherChanLen     int // Length of the StatGopher channel
 	}
 	Parameters struct {
 		Listener struct {
@@ -50,7 +51,6 @@ type CassabonConfig struct {
 		DataStore struct {
 			MaxPendingMetrics int
 			MaxFlushDelay     int
-			TodoChanLen       int
 		}
 	}
 }
@@ -137,12 +137,19 @@ func ParseStartupValues() {
 	if G.Channels.DataStoreChanLen > 1000 {
 		G.Channels.DataStoreChanLen = 1000
 	}
-	G.Channels.IndexerChanLen = rawCassabonConfig.Channels.IndexerChanLen
-	if G.Channels.IndexerChanLen < 10 {
-		G.Channels.IndexerChanLen = 10
+	G.Channels.StatStoreChanLen = rawCassabonConfig.Channels.StatStoreChanLen
+	if G.Channels.StatStoreChanLen < 5 {
+		G.Channels.StatStoreChanLen = 5
 	}
-	if G.Channels.IndexerChanLen > 1000 {
-		G.Channels.IndexerChanLen = 1000
+	if G.Channels.StatStoreChanLen > 100 {
+		G.Channels.StatStoreChanLen = 100
+	}
+	G.Channels.IndexStoreChanLen = rawCassabonConfig.Channels.IndexStoreChanLen
+	if G.Channels.IndexStoreChanLen < 10 {
+		G.Channels.IndexStoreChanLen = 10
+	}
+	if G.Channels.IndexStoreChanLen > 1000 {
+		G.Channels.IndexStoreChanLen = 1000
 	}
 	G.Channels.GopherChanLen = rawCassabonConfig.Channels.GopherChanLen
 	if G.Channels.GopherChanLen < 10 {
@@ -198,13 +205,6 @@ func ParseRefreshableValues() {
 	}
 	if G.Parameters.DataStore.MaxFlushDelay > 30 {
 		G.Parameters.DataStore.MaxFlushDelay = 30
-	}
-	G.Parameters.DataStore.TodoChanLen = rawCassabonConfig.Parameters.DataStore.TodoChanLen
-	if G.Parameters.DataStore.TodoChanLen < 5 {
-		G.Parameters.DataStore.TodoChanLen = 5
-	}
-	if G.Parameters.DataStore.TodoChanLen > 100 {
-		G.Parameters.DataStore.TodoChanLen = 100
 	}
 
 	// Validate, copy in and normalize the rollup definitions.
