@@ -48,10 +48,6 @@ type CassabonConfig struct {
 			TCPTimeout int
 			UDPTimeout int
 		}
-		DataStore struct {
-			MaxPendingMetrics int
-			MaxFlushDelay     int
-		}
 	}
 }
 
@@ -189,22 +185,6 @@ func ParseRefreshableValues() {
 	}
 	if G.Parameters.Listener.UDPTimeout > 30 {
 		G.Parameters.Listener.UDPTimeout = 30
-	}
-
-	// Copy in and sanitize the DataStore internal parameters.
-	G.Parameters.DataStore.MaxPendingMetrics = rawCassabonConfig.Parameters.DataStore.MaxPendingMetrics
-	if G.Parameters.DataStore.MaxPendingMetrics < 1 {
-		G.Parameters.DataStore.MaxPendingMetrics = 1
-	}
-	if G.Parameters.DataStore.MaxPendingMetrics > 500 {
-		G.Parameters.DataStore.MaxPendingMetrics = 500
-	}
-	G.Parameters.DataStore.MaxFlushDelay = rawCassabonConfig.Parameters.DataStore.MaxFlushDelay
-	if G.Parameters.DataStore.MaxFlushDelay < 1 {
-		G.Parameters.DataStore.MaxFlushDelay = 1
-	}
-	if G.Parameters.DataStore.MaxFlushDelay > 30 {
-		G.Parameters.DataStore.MaxFlushDelay = 30
 	}
 
 	// Validate, copy in and normalize the rollup definitions.

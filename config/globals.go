@@ -111,9 +111,5 @@ type Globals struct {
 			TCPTimeout int
 			UDPTimeout int
 		}
-		DataStore struct {
-			MaxPendingMetrics int
-			MaxFlushDelay     int
-		}
 	}
 }

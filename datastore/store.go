@@ -16,19 +16,41 @@ func (sm *StoreManager) Init() {
 	// Initialize private objects.
 	sm.setTimeout = make(chan time.Duration, 0)
 	sm.timeout = make(chan struct{}, 1)
+	// TODO: initialize rollup data structures
 
 	// Start the persistent goroutines.
-	config.G.OnExitWG.Add(1)
+	config.G.OnExitWG.Add(2)
 	go sm.timer()
+	go sm.insert()
 
 	// Kick off the timer.
-	sm.setTimeout <- time.Duration(config.G.Parameters.DataStore.MaxFlushDelay) * time.Second
+	sm.setTimeout <- time.Duration( /*TODO*/ 5) * time.Second
 }
 
 func (sm *StoreManager) Start() {
-	config.G.OnReload2WG.Add(2)
-	go sm.insert()
+	config.G.OnReload2WG.Add(1)
 	go sm.run()
+}
+
+func (sm *StoreManager) run() {
+
+	// Wait for metrics entries to arrive, and process them.
+	for {
+		select {
+		case <-config.G.OnReload2:
+			config.G.Log.System.LogDebug("StoreManager::run received QUIT message")
+			config.G.OnReload2WG.Done()
+			return
+		case metric := <-config.G.Channels.DataStore:
+			config.G.Log.System.LogDebug("StoreManager received metric: %v", metric)
+
+			// Send the entry off for writing to the path index.
+			config.G.Channels.IndexStore <- metric
+
+			// Send the entry off for writing to the stats store.
+			config.G.Channels.StatStore <- metric
+		}
+	}
 }
 
 // timer sends a message on the "timeout" channel after the specified duration.
@@ -56,37 +78,17 @@ func (sm *StoreManager) timer() {
 	}
 }
 
-func (sm *StoreManager) run() {
-
-	// Open connection to the Cassandra database here, so we can defer the close.
-
-	// Wait for metrics entries to arrive, and process them.
-	for {
-		select {
-		case <-config.G.OnReload2:
-			config.G.Log.System.LogDebug("StoreManager::run received QUIT message")
-			config.G.OnReload2WG.Done()
-			return
-		case metric := <-config.G.Channels.DataStore:
-			config.G.Log.System.LogDebug("StoreManager received metric: %v", metric)
-
-			// Send the entry off for writing to the path index.
-			config.G.Channels.IndexStore <- metric
-
-			// Send the entry off for writing to the stats store.
-			config.G.Channels.StatStore <- metric
-		}
-	}
-}
-
-// insert accumulates metrics entries up to a count or up to a timeout, and writes them.
+// insert accumulates metrics at each rollup level, and writes them out at defined intervals.
 func (sm *StoreManager) insert() {
+
+	// TODO: Open connection to the Cassandra database here, so we can defer the close.
+
 	for {
 		select {
-		case <-config.G.OnReload2:
+		case <-config.G.OnExit:
 			config.G.Log.System.LogDebug("StoreManager::insert received QUIT message")
 			sm.flush()
-			config.G.OnReload2WG.Done()
+			config.G.OnExitWG.Done()
 			return
 		case metric := <-config.G.Channels.StatStore:
 			config.G.Log.System.LogDebug("StoreManager::insert received metric: %v", metric)
@@ -95,7 +97,7 @@ func (sm *StoreManager) insert() {
 			config.G.Log.System.LogDebug("StoreManager::insert received timeout")
 			sm.flush()
 			select {
-			case sm.setTimeout <- time.Duration(config.G.Parameters.DataStore.MaxFlushDelay) * time.Second:
+			case sm.setTimeout <- time.Duration( /*TODO*/ 5) * time.Second:
 				// Notification sent
 			default:
 				// Do not block if channel is at capacity
@@ -104,7 +106,7 @@ func (sm *StoreManager) insert() {
 	}
 }
 
-// accumulate records a metric for subsequent flush to the database.
+// accumulate records a metric according to the rollup definitions.
 func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 	config.G.Log.System.LogDebug("StoreManager::accumulate")
 }

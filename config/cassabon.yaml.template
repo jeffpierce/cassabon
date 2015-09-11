@@ -28,10 +28,6 @@ parameters:
     listener:
         tcptimeout: 5
         udptimeout: 5
-    datastore:
-        maxpendingmetrics: 25
-        maxflushdelay: 5
-        todochanlen: 3
 redis:
     index:
         addr:
