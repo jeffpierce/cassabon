@@ -24,14 +24,14 @@ func (cpl *CarbonPlaintextListener) Start() {
 	switch config.G.Carbon.Protocol {
 	case "tcp":
 		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
-		config.G.WG.Add(1)
+		config.G.OnReload1WG.Add(1)
 	case "udp":
 		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
-		config.G.WG.Add(1)
+		config.G.OnReload1WG.Add(1)
 	default:
 		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
 		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
-		config.G.WG.Add(2)
+		config.G.OnReload1WG.Add(2)
 	}
 }
 
@@ -52,10 +52,9 @@ func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string) {
 	// Start listener and pass incoming connections to handler.
 	for {
 		select {
-		case <-config.G.QuitMain:
+		case <-config.G.OnReload1:
 			config.G.Log.System.LogDebug("CarbonTCP received QUIT message")
-			close(config.G.QuitListener) // No further input coming, other goroutines should exit.
-			config.G.WG.Done()
+			config.G.OnReload1WG.Done()
 			return
 		default:
 			// On receipt of a connection, spawn a goroutine to handle it.
@@ -114,10 +113,9 @@ func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
 	remBytes := 0                // The number of data bytes in remBuf
 	for {
 		select {
-		case <-config.G.QuitMain:
+		case <-config.G.OnReload1:
 			config.G.Log.System.LogDebug("CarbonUDP received QUIT message")
-			close(config.G.QuitListener) // No further input coming, other goroutines should exit.
-			config.G.WG.Done()
+			config.G.OnReload1WG.Done()
 			return
 		default:
 			udpConn.SetDeadline(time.Now().Add(time.Duration(config.G.Parameters.Listener.UDPTimeout) * time.Second))

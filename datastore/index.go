@@ -22,7 +22,7 @@ func (indexer *MetricsIndexer) Init() {
 }
 
 func (indexer *MetricsIndexer) Start() {
-	config.G.WG.Add(1)
+	config.G.OnReload2WG.Add(1)
 	go indexer.run()
 }
 
@@ -58,9 +58,9 @@ func (indexer *MetricsIndexer) run() {
 	// Wait for entries to arrive, and process them.
 	for {
 		select {
-		case <-config.G.QuitListener:
+		case <-config.G.OnReload2:
 			config.G.Log.System.LogDebug("Indexer::run received QUIT message")
-			config.G.WG.Done()
+			config.G.OnReload2WG.Done()
 			return
 		case metric := <-config.G.Channels.Indexer:
 			config.G.Log.System.LogDebug("Indexer received metric: %v", metric)

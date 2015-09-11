@@ -23,7 +23,7 @@ func (sm *StoreManager) Init() {
 func (sm *StoreManager) Start() {
 
 	// Start the goroutines.
-	config.G.WG.Add(3)
+	config.G.OnReload2WG.Add(3)
 	go sm.timer()
 	go sm.insert()
 	go sm.run()
@@ -39,9 +39,9 @@ func (sm *StoreManager) run() {
 	// Wait for metrics entries to arrive, and process them.
 	for {
 		select {
-		case <-config.G.QuitListener:
+		case <-config.G.OnReload2:
 			config.G.Log.System.LogDebug("StoreManager::run received QUIT message")
-			config.G.WG.Done()
+			config.G.OnReload2WG.Done()
 			return
 		case metric := <-config.G.Channels.DataStore:
 			config.G.Log.System.LogDebug("StoreManager received metric: %v", metric)
@@ -59,10 +59,10 @@ func (sm *StoreManager) run() {
 func (sm *StoreManager) insert() {
 	for {
 		select {
-		case <-config.G.QuitListener:
+		case <-config.G.OnReload2:
 			config.G.Log.System.LogDebug("StoreManager::insert received QUIT message")
 			sm.flush()
-			config.G.WG.Done()
+			config.G.OnReload2WG.Done()
 			return
 		case metric := <-sm.todo:
 			config.G.Log.System.LogDebug("StoreManager::insert received metric: %v", metric)
@@ -84,14 +84,14 @@ func (sm *StoreManager) insert() {
 func (sm *StoreManager) timer() {
 	for {
 		select {
-		case <-config.G.QuitListener:
+		case <-config.G.OnReload2:
 			config.G.Log.System.LogDebug("StoreManager::timer received QUIT message")
-			config.G.WG.Done()
+			config.G.OnReload2WG.Done()
 			return
 		case duration := <-sm.setTimeout:
 			// Block in this state until a new entry is received.
 			select {
-			case <-config.G.QuitListener:
+			case <-config.G.OnReload2:
 				// Nothing; do handling above on next iteration.
 			case <-time.After(duration):
 				select {

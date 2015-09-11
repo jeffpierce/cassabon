@@ -31,7 +31,7 @@ func (gopher *StatPathGopher) Init() {
 }
 
 func (gopher *StatPathGopher) Start() {
-	config.G.WG.Add(1)
+	config.G.OnReload2WG.Add(1)
 	go gopher.run()
 }
 
@@ -66,9 +66,9 @@ func (gopher *StatPathGopher) run() {
 	// Wait for a stat path query to arrive, then process it.
 	for {
 		select {
-		case <-config.G.QuitListener:
+		case <-config.G.OnReload2:
 			config.G.Log.System.LogDebug("Gopher::run received QUIT message")
-			config.G.WG.Done()
+			config.G.OnReload2WG.Done()
 			return
 
 		case gopherQuery := <-config.G.Channels.Gopher:
