@@ -28,7 +28,9 @@ type MetricResponse struct {
 }
 
 func (gopher *StatPathGopher) Init() {
-	// Add to waitgroup and run goroutine.
+}
+
+func (gopher *StatPathGopher) Start() {
 	config.G.WG.Add(1)
 	go gopher.run()
 }

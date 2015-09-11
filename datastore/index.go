@@ -19,7 +19,9 @@ type MetricsIndexer struct {
 }
 
 func (indexer *MetricsIndexer) Init() {
-	// Start the goroutines.
+}
+
+func (indexer *MetricsIndexer) Start() {
 	config.G.WG.Add(1)
 	go indexer.run()
 }

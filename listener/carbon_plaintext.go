@@ -18,6 +18,9 @@ type CarbonPlaintextListener struct {
 }
 
 func (cpl *CarbonPlaintextListener) Init() {
+}
+
+func (cpl *CarbonPlaintextListener) Start() {
 	switch config.G.Carbon.Protocol {
 	case "tcp":
 		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)

@@ -81,6 +81,16 @@ func main() {
 	config.G.Channels.Indexer = make(chan config.CarbonMetric, config.G.Channels.IndexerChanLen)
 	config.G.Channels.Gopher = make(chan config.IndexQuery, config.G.Channels.GopherChanLen)
 
+	// Create and initialize the internal modules.
+	storeManager := new(datastore.StoreManager)
+	statIndexer := new(datastore.MetricsIndexer)
+	statGopher := new(datastore.StatPathGopher)
+	carbonListener := new(listener.CarbonPlaintextListener)
+	storeManager.Init()
+	statIndexer.Init()
+	statGopher.Init()
+	carbonListener.Init()
+
 	// Repeat until terminated by SIGINT/SIGTERM.
 	configIsStale := false
 	repeat := true
@@ -98,21 +108,11 @@ func main() {
 			}
 		}
 
-		// Start the StoreManager.
-		ds := new(datastore.StoreManager)
-		ds.Init()
-
-		// Start the Indexer
-		statIndexer := new(datastore.MetricsIndexer)
-		statIndexer.Init()
-
-		// Start the StatPathGopher
-		statGopher := new(datastore.StatPathGopher)
-		statGopher.Init()
-
-		// Start the Carbon listener last.
-		cpl := new(listener.CarbonPlaintextListener)
-		cpl.Init()
+		// Start the internal modules, Carbon listener last.
+		storeManager.Start()
+		statIndexer.Start()
+		statGopher.Start()
+		carbonListener.Start()
 
 		// Start Cassabon Web API
 		api := new(api.CassabonAPI)

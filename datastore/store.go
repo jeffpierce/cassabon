@@ -18,6 +18,9 @@ func (sm *StoreManager) Init() {
 	sm.todo = make(chan config.CarbonMetric, config.G.Parameters.DataStore.TodoChanLen)
 	sm.setTimeout = make(chan time.Duration, 0)
 	sm.timeout = make(chan struct{}, 1)
+}
+
+func (sm *StoreManager) Start() {
 
 	// Start the goroutines.
 	config.G.WG.Add(3)
