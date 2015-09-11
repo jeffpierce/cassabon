@@ -50,9 +50,14 @@ var G Globals
 type Globals struct {
 
 	// Goroutine management.
-	QuitMain     chan struct{}
-	QuitListener chan struct{}
-	WG           sync.WaitGroup
+	// Note: Anything that accepts input should shut down first, so it should
+	// monitor OnReload1. Everything else should monitor OnReload2.
+	OnReload1   chan struct{}
+	OnReload2   chan struct{}
+	OnExit      chan struct{}
+	OnReload1WG sync.WaitGroup
+	OnReload2WG sync.WaitGroup
+	OnExitWG    sync.WaitGroup
 
 	// Channels for sending metrics between modules.
 	Channels struct {
