@@ -95,8 +95,8 @@ type Globals struct {
 	}
 
 	// Configuration of data point aggregations.
-	RollupPriority []string              // First matched expression wins
-	Rollup         map[string]*RollupDef // Rollup processing definitions by path expression
+	RollupPriority []string             // First matched expression wins
+	Rollup         map[string]RollupDef // Rollup processing definitions by path expression
 
 	// Configuration of internal elements.
 	Parameters struct {

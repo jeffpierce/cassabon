@@ -209,7 +209,7 @@ func ParseRefreshableValues() {
 
 	// Validate, copy in and normalize the rollup definitions.
 	G.RollupPriority = make([]string, 0, len(rawCassabonConfig.Rollups))
-	G.Rollup = make(map[string]*RollupDef)
+	G.Rollup = make(map[string]RollupDef)
 
 	var method RollupMethod
 	var window, retention time.Duration
@@ -293,7 +293,7 @@ func ParseRefreshableValues() {
 			}
 		}
 		sort.Sort(ByWindow(rd.Windows))
-		G.Rollup[expression] = rd
+		G.Rollup[expression] = *rd
 	}
 
 	// Sort the path expressions into priority order.
