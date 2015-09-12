@@ -6,9 +6,22 @@ import (
 	"github.com/jeffpierce/cassabon/config"
 )
 
+// rollups contains the accumulated metrics data for a path.
+type rollups struct {
+	expr  string    // The text form of the path expression, to locate the definition
+	count []uint64  // The number of data points accumulated (for averaging)
+	value []float64 // One rollup per window definition
+}
+
 type StoreManager struct {
+
+	// Timer management.
 	setTimeout chan time.Duration // Write a duration to this to get a notification on timeout channel
 	timeout    chan struct{}      // Timeout notifications arrive on this channel
+
+	// Rollup data.
+	metricData map[string]rollups // Stats, by path, broken out by rollup window duration.
+	maxTimeout time.Duration      // The duration of the shortest rollup window.
 }
 
 func (sm *StoreManager) Init() {
@@ -16,7 +29,10 @@ func (sm *StoreManager) Init() {
 	// Initialize private objects.
 	sm.setTimeout = make(chan time.Duration, 0)
 	sm.timeout = make(chan struct{}, 1)
-	// TODO: initialize rollup data structures
+
+	// Initialize rollup data structures.
+	sm.metricData = make(map[string]rollups)
+	sm.maxTimeout = 5
 
 	// Start the persistent goroutines.
 	config.G.OnExitWG.Add(2)
@@ -24,7 +40,7 @@ func (sm *StoreManager) Init() {
 	go sm.insert()
 
 	// Kick off the timer.
-	sm.setTimeout <- time.Duration( /*TODO*/ 5) * time.Second
+	sm.setTimeout <- time.Duration(sm.maxTimeout) * time.Second
 }
 
 func (sm *StoreManager) Start() {
@@ -97,7 +113,7 @@ func (sm *StoreManager) insert() {
 			config.G.Log.System.LogDebug("StoreManager::insert received timeout")
 			sm.flush()
 			select {
-			case sm.setTimeout <- time.Duration( /*TODO*/ 5) * time.Second:
+			case sm.setTimeout <- time.Duration(sm.maxTimeout) * time.Second:
 				// Notification sent
 			default:
 				// Do not block if channel is at capacity
@@ -109,6 +125,58 @@ func (sm *StoreManager) insert() {
 // accumulate records a metric according to the rollup definitions.
 func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 	config.G.Log.System.LogDebug("StoreManager::accumulate")
+
+	// Locate the metric in the map.
+	var currentRollups rollups
+	var found bool
+	if currentRollups, found = sm.metricData[metric.Path]; !found {
+
+		// Determine which expression matches this path.
+		for _, expr := range config.G.RollupPriority {
+			if expr != config.CATCHALL_EXPRESSION {
+				if config.G.Rollup[expr].Expression.MatchString(metric.Path) {
+					currentRollups.expr = expr
+					break
+				}
+			} else {
+				currentRollups.expr = config.CATCHALL_EXPRESSION
+			}
+		}
+
+		currentRollups.count = make([]uint64, len(config.G.Rollup[currentRollups.expr].Windows))
+		currentRollups.value = make([]float64, len(config.G.Rollup[currentRollups.expr].Windows))
+	}
+
+	// Apply the incoming metric to each rollup bucket.
+	switch config.G.Rollup[currentRollups.expr].Method {
+	case config.AVERAGE:
+		for i, v := range currentRollups.value {
+			currentRollups.value[i] = (v*float64(currentRollups.count[i]) + metric.Value) /
+				float64(currentRollups.count[i]+1)
+		}
+	case config.MAX:
+		for i, v := range currentRollups.value {
+			if v < metric.Value {
+				currentRollups.value[i] = metric.Value
+			}
+		}
+	case config.MIN:
+		for i, v := range currentRollups.value {
+			if v > metric.Value {
+				currentRollups.value[i] = metric.Value
+			}
+		}
+	case config.SUM:
+		for i, v := range currentRollups.value {
+			currentRollups.value[i] = v + metric.Value
+		}
+	}
+	for i, _ := range currentRollups.count {
+		currentRollups.count[i]++
+	}
+
+	// Save the updated structure.
+	sm.metricData[metric.Path] = currentRollups
 }
 
 // flush persists the accumulated metrics to the database.

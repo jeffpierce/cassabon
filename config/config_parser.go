@@ -205,13 +205,13 @@ func ParseRefreshableValues() {
 		// Validate and decode the aggregation method.
 		switch strings.ToLower(v.Aggregation) {
 		case "average":
-			method = Average
+			method = AVERAGE
 		case "max":
-			method = Max
+			method = MAX
 		case "min":
-			method = Min
+			method = MIN
 		case "sum":
-			method = Sum
+			method = SUM
 		default:
 			G.Log.System.LogWarn("Invalid aggregation method for \"%s\": %s", expression, v.Aggregation)
 			continue
@@ -222,6 +222,14 @@ func ParseRefreshableValues() {
 		rd = new(RollupDef)
 		rd.Method = method
 		rd.Windows = make([]RollupWindow, 0)
+		if expression != CATCHALL_EXPRESSION {
+			if re, err := regexp.Compile(expression); err == nil {
+				rd.Expression = re
+			} else {
+				G.Log.System.LogWarn("Malformed regular expression for \"%s\": %v", expression, err)
+				continue
+			}
+		}
 
 		// Parse and validate each window:retention pair.
 		for _, s := range v.Retention {
@@ -307,10 +315,10 @@ func (p ByPriority) Swap(i, j int) {
 func (p ByPriority) Less(i, j int) bool {
 
 	// "default" is always last in priority.
-	if p[i] == "default" {
+	if p[i] == CATCHALL_EXPRESSION {
 		return false
 	}
-	if p[j] == "default" {
+	if p[j] == CATCHALL_EXPRESSION {
 		return true
 	}
 

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"regexp"
 	"sync"
 	"time"
 
@@ -24,11 +25,14 @@ type RollupMethod int
 
 // The valid rollup methods.
 const (
-	Average RollupMethod = iota
-	Max
-	Min
-	Sum
+	AVERAGE RollupMethod = iota
+	MAX
+	MIN
+	SUM
 )
+
+// The string that represents the catchall rollup.
+const CATCHALL_EXPRESSION = "default"
 
 // RollupWindow is the definition of one rollup interval.
 type RollupWindow struct {
@@ -38,9 +42,10 @@ type RollupWindow struct {
 
 // RollupDef is the definition of how to process a path expression.
 type RollupDef struct {
-	Method    RollupMethod
-	MaxWindow time.Duration
-	Windows   []RollupWindow
+	Method     RollupMethod
+	MaxWindow  time.Duration
+	Expression *regexp.Regexp
+	Windows    []RollupWindow
 }
 
 // The globally accessible configuration and state object.
