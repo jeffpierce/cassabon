@@ -217,8 +217,7 @@ func ParseRefreshableValues() {
 			continue
 		}
 
-		// Record the regular expression and its aggregation method.
-		G.RollupPriority = append(G.RollupPriority, expression)
+		// Build up the rollup definitions for this regular expression.
 		rd = new(RollupDef)
 		rd.Method = method
 		rd.Windows = make([]RollupWindow, 0)
@@ -280,8 +279,34 @@ func ParseRefreshableValues() {
 				rd.MaxWindow = window
 			}
 		}
-		sort.Sort(ByWindow(rd.Windows))
-		G.Rollup[expression] = *rd
+
+		// If any of the rollup window definitions were valid, add expression to the list.
+		if len(rd.Windows) > 0 {
+
+			// Sort windows into ascending duration order, and validate.
+			sort.Sort(ByWindow(rd.Windows))
+			shortestDuration := rd.Windows[0].Window
+			allExactMultiples := true
+			for i, v := range rd.Windows {
+				if i > 0 {
+					remainder := v.Window % shortestDuration
+					if remainder != 0 {
+						G.Log.System.LogWarn(
+							"Next duration is not a multiple for \"%s\": %v %% %v remainder is %v",
+							expression, v.Window, shortestDuration, remainder)
+						allExactMultiples = false
+					}
+				}
+			}
+
+			// If all durations are exact multiples of the shortest duration, save this expression.
+			if allExactMultiples {
+				G.Rollup[expression] = *rd
+				G.RollupPriority = append(G.RollupPriority, expression)
+			} else {
+				G.Log.System.LogWarn("Rollup expression rejected: \"%s\"", expression)
+			}
+		}
 	}
 
 	// Sort the path expressions into priority order.
