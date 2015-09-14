@@ -31,6 +31,17 @@ type StoreManager struct {
 	maxTimeout time.Duration       // The duration of the shortest rollup window.
 }
 
+// nextTimeBoundary returns the time when the currently open time window closes.
+func nextTimeBoundary(baseTime time.Time, windowSize time.Duration) time.Time {
+	// This will round down before the halfway point.
+	b := baseTime.Round(windowSize)
+	if b.Before(baseTime) {
+		// It was rounded down, adjust up to next boundary.
+		b = b.Add(windowSize)
+	}
+	return b
+}
+
 func (sm *StoreManager) Init() {
 
 	// Initialize private objects.
@@ -40,11 +51,16 @@ func (sm *StoreManager) Init() {
 	// Initialize rollup data structures.
 	sm.byPath = make(map[string]*rollup)
 	sm.byExpr = make(map[string]*runlist)
+	baseTime := time.Now()
 	for expr, rollupdef := range config.G.Rollup {
 		// For each expression, provide a place to record all the paths that it matches.
 		rl := new(runlist)
 		rl.nextWrite = make([]time.Time, len(rollupdef.Windows))
 		rl.path = make(map[string]*rollup)
+		// Establish the next time boundary on which each write will take place.
+		for i, v := range rollupdef.Windows {
+			rl.nextWrite[i] = nextTimeBoundary(baseTime, v.Window)
+		}
 		sm.byExpr[expr] = rl
 	}
 	sm.maxTimeout = 5
