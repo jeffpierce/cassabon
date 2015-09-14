@@ -246,6 +246,12 @@ func ParseRefreshableValues() {
 				continue
 			}
 
+			// Don't permit windows shorter than 1 second.
+			if window < time.Second {
+				G.Log.System.LogWarn("Duration less than minimum 1 second for \"%s\": %v", expression, window)
+				continue
+			}
+
 			// Convert the retention to a time.Duration (max: 720 years).
 			// ParseDuration doesn't handle anything longer than hours, so do it manually.
 			matches := re.FindStringSubmatch(couplet[1]) // "1d" -> [ 1d 1 d ]
