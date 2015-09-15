@@ -39,7 +39,6 @@ type CassabonConfig struct {
 	Rollups  map[string]RollupSettings // Map of regex and rollups
 	Channels struct {
 		DataStoreChanLen  int // Length of the DataStore channel
-		StatStoreChanLen  int // Length of the StatStore channel
 		IndexStoreChanLen int // Length of the Indexer channel
 		GopherChanLen     int // Length of the StatGopher channel
 	}
@@ -132,13 +131,6 @@ func ParseStartupValues() {
 	}
 	if G.Channels.DataStoreChanLen > 1000 {
 		G.Channels.DataStoreChanLen = 1000
-	}
-	G.Channels.StatStoreChanLen = rawCassabonConfig.Channels.StatStoreChanLen
-	if G.Channels.StatStoreChanLen < 5 {
-		G.Channels.StatStoreChanLen = 5
-	}
-	if G.Channels.StatStoreChanLen > 100 {
-		G.Channels.StatStoreChanLen = 100
 	}
 	G.Channels.IndexStoreChanLen = rawCassabonConfig.Channels.IndexStoreChanLen
 	if G.Channels.IndexStoreChanLen < 10 {

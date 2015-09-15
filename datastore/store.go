@@ -21,6 +21,11 @@ type runlist struct {
 
 type StoreManager struct {
 
+	// Rollup configuration.
+	// Note: Does not reload on SIGHUP.
+	rollupPriority []string                    // First matched expression wins
+	rollup         map[string]config.RollupDef // Rollup processing definitions by path expression
+
 	// Timer management.
 	setTimeout chan time.Duration // Write a duration to this to get a notification on timeout channel
 	timeout    chan struct{}      // Timeout notifications arrive on this channel
@@ -43,6 +48,10 @@ func nextTimeBoundary(baseTime time.Time, windowSize time.Duration) time.Time {
 
 func (sm *StoreManager) Init() {
 
+	// Copy in the configuration (requires hard restart to refresh).
+	sm.rollupPriority = config.G.RollupPriority
+	sm.rollup = config.G.Rollup
+
 	// Initialize private objects.
 	sm.setTimeout = make(chan time.Duration, 0)
 	sm.timeout = make(chan struct{}, 1)
@@ -51,7 +60,7 @@ func (sm *StoreManager) Init() {
 	sm.byPath = make(map[string]*rollup)
 	sm.byExpr = make(map[string]*runlist)
 	baseTime := time.Now()
-	for expr, rollupdef := range config.G.Rollup {
+	for expr, rollupdef := range sm.rollup {
 		// For each expression, provide a place to record all the paths that it matches.
 		rl := new(runlist)
 		rl.nextWriteTime = make([]time.Time, len(rollupdef.Windows))
@@ -66,34 +75,30 @@ func (sm *StoreManager) Init() {
 	// Start the persistent goroutines.
 	config.G.OnExitWG.Add(2)
 	go sm.timer()
-	go sm.insert()
+	go sm.run()
 
 	// Kick off the timer.
 	sm.setTimeout <- time.Second
 }
 
 func (sm *StoreManager) Start() {
-	config.G.OnReload2WG.Add(1)
-	go sm.run()
 }
 
 func (sm *StoreManager) run() {
 
-	// Wait for metrics entries to arrive, and process them.
+	// TODO: Open connection to the Cassandra database here, so we can defer the close.
+
 	for {
 		select {
-		case <-config.G.OnReload2:
+		case <-config.G.OnExit:
 			config.G.Log.System.LogDebug("StoreManager::run received QUIT message")
-			config.G.OnReload2WG.Done()
+			sm.flush(true)
+			config.G.OnExitWG.Done()
 			return
 		case metric := <-config.G.Channels.DataStore:
-			config.G.Log.System.LogDebug("StoreManager received metric: %v", metric)
-
-			// Send the entry off for writing to the path index.
-			config.G.Channels.IndexStore <- metric
-
-			// Send the entry off for writing to the stats store.
-			config.G.Channels.StatStore <- metric
+			sm.accumulate(metric)
+		case <-sm.timeout:
+			sm.flush(false)
 		}
 	}
 }
@@ -123,29 +128,9 @@ func (sm *StoreManager) timer() {
 	}
 }
 
-// insert accumulates metrics at each rollup level, and writes them out at defined intervals.
-func (sm *StoreManager) insert() {
-
-	// TODO: Open connection to the Cassandra database here, so we can defer the close.
-
-	for {
-		select {
-		case <-config.G.OnExit:
-			config.G.Log.System.LogDebug("StoreManager::insert received QUIT message")
-			sm.flush(true)
-			config.G.OnExitWG.Done()
-			return
-		case metric := <-config.G.Channels.StatStore:
-			sm.accumulate(metric)
-		case <-sm.timeout:
-			sm.flush(false)
-		}
-	}
-}
-
 // accumulate records a metric according to the rollup definitions.
 func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
-	config.G.Log.System.LogDebug("StoreManager::accumulate")
+	config.G.Log.System.LogDebug("StoreManager::accumulate %s=%v", metric.Path, metric.Value)
 
 	// Locate the metric in the map.
 	var currentRollup *rollup
@@ -154,9 +139,9 @@ func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 
 		// Determine which expression matches this path.
 		var expr string
-		for _, expr = range config.G.RollupPriority {
+		for _, expr = range sm.rollupPriority {
 			if expr != config.CATCHALL_EXPRESSION {
-				if config.G.Rollup[expr].Expression.MatchString(metric.Path) {
+				if sm.rollup[expr].Expression.MatchString(metric.Path) {
 					break
 				}
 			}
@@ -166,14 +151,17 @@ func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 		// Initialize, and insert the new rollup into both maps.
 		currentRollup = new(rollup)
 		currentRollup.expr = expr
-		currentRollup.count = make([]uint64, len(config.G.Rollup[expr].Windows))
-		currentRollup.value = make([]float64, len(config.G.Rollup[expr].Windows))
+		currentRollup.count = make([]uint64, len(sm.rollup[expr].Windows))
+		currentRollup.value = make([]float64, len(sm.rollup[expr].Windows))
 		sm.byPath[metric.Path] = currentRollup
 		sm.byExpr[expr].path[metric.Path] = currentRollup
+
+		// Send the entry off for writing to the path index.
+		config.G.Channels.IndexStore <- metric
 	}
 
 	// Apply the incoming metric to each rollup bucket.
-	switch config.G.Rollup[currentRollup.expr].Method {
+	switch sm.rollup[currentRollup.expr].Method {
 	case config.AVERAGE:
 		for i, v := range currentRollup.value {
 			currentRollup.value[i] = (v*float64(currentRollup.count[i]) + metric.Value) /
@@ -228,8 +216,11 @@ func (sm *StoreManager) flush(terminating bool) {
 					// Has any data accumulated while the window was open?
 					if rollup.count[i] > 0 {
 						// TODO: Write the data to persistent storage.
-						config.G.Log.System.LogDebug("%-15s writing %v %s = %v",
-							expr, config.G.Rollup[expr].Windows[i].Window, path, rollup.value[i])
+						config.G.Log.System.LogDebug("Writing %-15s win=%v ret=%v path=%s value=%v ts=%v",
+							expr,
+							sm.rollup[expr].Windows[i].Window,
+							sm.rollup[expr].Windows[i].Retention,
+							path, rollup.value[i], windowEnd.Format("15:04:05.000"))
 					}
 
 					// Ensure the bucket is empty for the next open window.
@@ -238,7 +229,7 @@ func (sm *StoreManager) flush(terminating bool) {
 				}
 
 				// Set a new window closing time for the just-cleared window.
-				rl.nextWriteTime[i] = nextTimeBoundary(baseTime, config.G.Rollup[expr].Windows[i].Window)
+				rl.nextWriteTime[i] = nextTimeBoundary(baseTime, sm.rollup[expr].Windows[i].Window)
 			}
 			// ASSERT: rl.nextWriteTime[i] time is in the future (later than baseTime).
 
