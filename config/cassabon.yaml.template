@@ -43,9 +43,16 @@ redis:
         sentinel: false
         master: ""
 rollups:
-  ^foo2\.*:
+  ^foo\.*:
     retention:
       - 6s:30m
+      - 1m:30d
+      - 1h:1y
+    aggregation: sum
+  ^foo2\.*:
+    retention:
+      - 15ms:30m
+      - 7s:30m
       - 1m:30d
       - 1h:1y
     aggregation: average
