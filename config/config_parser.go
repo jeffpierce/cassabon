@@ -299,7 +299,7 @@ func ParseRefreshableValues() {
 				G.Rollup[expression] = *rd
 				G.RollupPriority = append(G.RollupPriority, expression)
 			} else {
-				G.Log.System.LogWarn("Rollup expression rejected: \"%s\"", expression)
+				G.Log.System.LogWarn("Rollup expression rejected due to previous errors: \"%s\"", expression)
 			}
 		}
 	}
