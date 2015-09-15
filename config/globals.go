@@ -43,7 +43,6 @@ type RollupWindow struct {
 // RollupDef is the definition of how to process a path expression.
 type RollupDef struct {
 	Method     RollupMethod
-	MaxWindow  time.Duration
 	Expression *regexp.Regexp
 	Windows    []RollupWindow
 }

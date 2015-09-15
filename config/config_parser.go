@@ -281,9 +281,6 @@ func ParseRefreshableValues() {
 
 			// Append to the rollups for this expression.
 			rd.Windows = append(rd.Windows, RollupWindow{window, retention})
-			if rd.MaxWindow < window {
-				rd.MaxWindow = window
-			}
 		}
 
 		// If any of the rollup window definitions were valid, add expression to the list.
