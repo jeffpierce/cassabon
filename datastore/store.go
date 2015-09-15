@@ -15,8 +15,8 @@ type rollup struct {
 
 // runlist contains the paths to be written for an expression, and when to write the rollups.
 type runlist struct {
-	nextWrite []time.Time        // The next write time for each rollup bucket
-	path      map[string]*rollup // The rollup data for each path matched by the expression
+	nextWriteTime []time.Time        // The next write time for each rollup bucket
+	path          map[string]*rollup // The rollup data for each path matched by the expression
 }
 
 type StoreManager struct {
@@ -26,9 +26,8 @@ type StoreManager struct {
 	timeout    chan struct{}      // Timeout notifications arrive on this channel
 
 	// Rollup data.
-	byPath     map[string]*rollup  // Stats, by path, for rollup accumulation
-	byExpr     map[string]*runlist // Stats, by path within expression, for rollup processing
-	maxTimeout time.Duration       // The duration of the shortest rollup window.
+	byPath map[string]*rollup  // Stats, by path, for rollup accumulation
+	byExpr map[string]*runlist // Stats, by path within expression, for rollup processing
 }
 
 // nextTimeBoundary returns the time when the currently open time window closes.
@@ -55,15 +54,14 @@ func (sm *StoreManager) Init() {
 	for expr, rollupdef := range config.G.Rollup {
 		// For each expression, provide a place to record all the paths that it matches.
 		rl := new(runlist)
-		rl.nextWrite = make([]time.Time, len(rollupdef.Windows))
+		rl.nextWriteTime = make([]time.Time, len(rollupdef.Windows))
 		rl.path = make(map[string]*rollup)
 		// Establish the next time boundary on which each write will take place.
 		for i, v := range rollupdef.Windows {
-			rl.nextWrite[i] = nextTimeBoundary(baseTime, v.Window)
+			rl.nextWriteTime[i] = nextTimeBoundary(baseTime, v.Window)
 		}
 		sm.byExpr[expr] = rl
 	}
-	sm.maxTimeout = 5
 
 	// Start the persistent goroutines.
 	config.G.OnExitWG.Add(2)
@@ -71,7 +69,7 @@ func (sm *StoreManager) Init() {
 	go sm.insert()
 
 	// Kick off the timer.
-	sm.setTimeout <- time.Duration(sm.maxTimeout) * time.Second
+	sm.setTimeout <- time.Second
 }
 
 func (sm *StoreManager) Start() {
@@ -134,21 +132,13 @@ func (sm *StoreManager) insert() {
 		select {
 		case <-config.G.OnExit:
 			config.G.Log.System.LogDebug("StoreManager::insert received QUIT message")
-			sm.flush()
+			sm.flush(true)
 			config.G.OnExitWG.Done()
 			return
 		case metric := <-config.G.Channels.StatStore:
-			config.G.Log.System.LogDebug("StoreManager::insert received metric: %v", metric)
 			sm.accumulate(metric)
 		case <-sm.timeout:
-			config.G.Log.System.LogDebug("StoreManager::insert received timeout")
-			sm.flush()
-			select {
-			case sm.setTimeout <- time.Duration(sm.maxTimeout) * time.Second:
-				// Notification sent
-			default:
-				// Do not block if channel is at capacity
-			}
+			sm.flush(false)
 		}
 	}
 }
@@ -214,6 +204,67 @@ func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 }
 
 // flush persists the accumulated metrics to the database.
-func (sm *StoreManager) flush() {
-	config.G.Log.System.LogDebug("StoreManager::flush")
+func (sm *StoreManager) flush(terminating bool) {
+	config.G.Log.System.LogDebug("StoreManager::flush terminating=%v", terminating)
+
+	// Use a consistent current time for all tests in this cycle.
+	baseTime := time.Now()
+
+	// Use a reasonable default value for setting the next timer delay.
+	nextFlush := baseTime.Add(time.Minute)
+
+	// Walk the set of expressions, looking for closed rollup windows.
+	for expr, rl := range sm.byExpr {
+
+		// Inspect each rollup window defined for this expression.
+		for i, windowEnd := range rl.nextWriteTime {
+
+			// If the window has closed, process and clear the data.
+			if windowEnd.Before(baseTime) {
+
+				// Iterate over all the paths that match the current expression.
+				for path, rollup := range rl.path {
+
+					// Has any data accumulated while the window was open?
+					if rollup.count[i] > 0 {
+						// TODO: Write the data to persistent storage.
+						config.G.Log.System.LogDebug("%-15s writing %v %s = %v",
+							expr, config.G.Rollup[expr].Windows[i].Window, path, rollup.value[i])
+					}
+
+					// Ensure the bucket is empty for the next open window.
+					rollup.count[i] = 0
+					rollup.value[i] = 0
+				}
+
+				// Set a new window closing time for the just-cleared window.
+				rl.nextWriteTime[i] = nextTimeBoundary(baseTime, config.G.Rollup[expr].Windows[i].Window)
+			}
+			// ASSERT: rl.nextWriteTime[i] time is in the future (later than baseTime).
+
+			// Adjust the timer delay downwards if this window closing time is
+			// earlier than all others seen so far.
+			if nextFlush.After(rl.nextWriteTime[i]) {
+				nextFlush = rl.nextWriteTime[i]
+			}
+		}
+	}
+
+	// Set a timer to expire when the earliest future window closing occurs.
+	if !terminating {
+
+		// Convert window closing time to a duration, and do a sanity check.
+		delay := nextFlush.Sub(baseTime)
+		if delay.Nanoseconds() < 0 {
+			delay = time.Millisecond
+		}
+
+		// Perform a non-blocking write to the timeout channel.
+		select {
+		case sm.setTimeout <- delay:
+			// Notification sent
+		default:
+			// Do not block if channel is at capacity
+		}
+	}
 }
