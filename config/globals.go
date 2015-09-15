@@ -67,8 +67,6 @@ type Globals struct {
 	Channels struct {
 		DataStore         chan CarbonMetric
 		DataStoreChanLen  int
-		StatStore         chan CarbonMetric
-		StatStoreChanLen  int
 		IndexStore        chan CarbonMetric
 		IndexStoreChanLen int
 		Gopher            chan IndexQuery

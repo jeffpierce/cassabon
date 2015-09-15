@@ -66,34 +66,30 @@ func (sm *StoreManager) Init() {
 	// Start the persistent goroutines.
 	config.G.OnExitWG.Add(2)
 	go sm.timer()
-	go sm.insert()
+	go sm.run()
 
 	// Kick off the timer.
 	sm.setTimeout <- time.Second
 }
 
 func (sm *StoreManager) Start() {
-	config.G.OnReload2WG.Add(1)
-	go sm.run()
 }
 
 func (sm *StoreManager) run() {
 
-	// Wait for metrics entries to arrive, and process them.
+	// TODO: Open connection to the Cassandra database here, so we can defer the close.
+
 	for {
 		select {
-		case <-config.G.OnReload2:
-			config.G.Log.System.LogDebug("StoreManager::run received QUIT message")
-			config.G.OnReload2WG.Done()
+		case <-config.G.OnExit:
+			config.G.Log.System.LogDebug("StoreManager::insert received QUIT message")
+			sm.flush(true)
+			config.G.OnExitWG.Done()
 			return
 		case metric := <-config.G.Channels.DataStore:
-			config.G.Log.System.LogDebug("StoreManager received metric: %v", metric)
-
-			// Send the entry off for writing to the path index.
-			config.G.Channels.IndexStore <- metric
-
-			// Send the entry off for writing to the stats store.
-			config.G.Channels.StatStore <- metric
+			sm.accumulate(metric)
+		case <-sm.timeout:
+			sm.flush(false)
 		}
 	}
 }
@@ -123,29 +119,9 @@ func (sm *StoreManager) timer() {
 	}
 }
 
-// insert accumulates metrics at each rollup level, and writes them out at defined intervals.
-func (sm *StoreManager) insert() {
-
-	// TODO: Open connection to the Cassandra database here, so we can defer the close.
-
-	for {
-		select {
-		case <-config.G.OnExit:
-			config.G.Log.System.LogDebug("StoreManager::insert received QUIT message")
-			sm.flush(true)
-			config.G.OnExitWG.Done()
-			return
-		case metric := <-config.G.Channels.StatStore:
-			sm.accumulate(metric)
-		case <-sm.timeout:
-			sm.flush(false)
-		}
-	}
-}
-
 // accumulate records a metric according to the rollup definitions.
 func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
-	config.G.Log.System.LogDebug("StoreManager::accumulate")
+	config.G.Log.System.LogDebug("StoreManager::accumulate %s=%v", metric.Path, metric.Value)
 
 	// Locate the metric in the map.
 	var currentRollup *rollup
@@ -170,6 +146,9 @@ func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 		currentRollup.value = make([]float64, len(config.G.Rollup[expr].Windows))
 		sm.byPath[metric.Path] = currentRollup
 		sm.byExpr[expr].path[metric.Path] = currentRollup
+
+		// Send the entry off for writing to the path index.
+		config.G.Channels.IndexStore <- metric
 	}
 
 	// Apply the incoming metric to each rollup bucket.
@@ -228,8 +207,11 @@ func (sm *StoreManager) flush(terminating bool) {
 					// Has any data accumulated while the window was open?
 					if rollup.count[i] > 0 {
 						// TODO: Write the data to persistent storage.
-						config.G.Log.System.LogDebug("%-15s writing %v %s = %v",
-							expr, config.G.Rollup[expr].Windows[i].Window, path, rollup.value[i])
+						config.G.Log.System.LogDebug("%-15s win=%v ret=%v path=%s value=%v",
+							expr,
+							config.G.Rollup[expr].Windows[i].Window,
+							config.G.Rollup[expr].Windows[i].Retention,
+							path, rollup.value[i])
 					}
 
 					// Ensure the bucket is empty for the next open window.

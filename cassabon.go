@@ -80,7 +80,6 @@ func main() {
 	config.G.OnExit = make(chan struct{}, 1)
 
 	config.G.Channels.DataStore = make(chan config.CarbonMetric, config.G.Channels.DataStoreChanLen)
-	config.G.Channels.StatStore = make(chan config.CarbonMetric, config.G.Channels.StatStoreChanLen)
 	config.G.Channels.IndexStore = make(chan config.CarbonMetric, config.G.Channels.IndexStoreChanLen)
 	config.G.Channels.Gopher = make(chan config.IndexQuery, config.G.Channels.GopherChanLen)
 
