@@ -82,7 +82,7 @@ func (sm *StoreManager) run() {
 	for {
 		select {
 		case <-config.G.OnExit:
-			config.G.Log.System.LogDebug("StoreManager::insert received QUIT message")
+			config.G.Log.System.LogDebug("StoreManager::run received QUIT message")
 			sm.flush(true)
 			config.G.OnExitWG.Done()
 			return
