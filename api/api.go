@@ -21,14 +21,14 @@ type CassabonAPI struct {
 
 func (api *CassabonAPI) Start() {
 	// Add to waitgroup and run go routine.
-	config.G.WG.Add(1)
+	config.G.OnReload1WG.Add(1)
 	go api.run()
 }
 
 func (api *CassabonAPI) Stop() {
 	config.G.Log.System.LogInfo("API received Stop command, gracefully shutting down.")
 	graceful.Shutdown()
-	config.G.WG.Done()
+	config.G.OnReload1WG.Done()
 }
 
 func (api *CassabonAPI) run() {

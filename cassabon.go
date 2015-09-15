@@ -77,9 +77,22 @@ func main() {
 	var sigterm = make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
 
+	config.G.OnExit = make(chan struct{}, 1)
+
 	config.G.Channels.DataStore = make(chan config.CarbonMetric, config.G.Channels.DataStoreChanLen)
-	config.G.Channels.Indexer = make(chan config.CarbonMetric, config.G.Channels.IndexerChanLen)
+	config.G.Channels.StatStore = make(chan config.CarbonMetric, config.G.Channels.StatStoreChanLen)
+	config.G.Channels.IndexStore = make(chan config.CarbonMetric, config.G.Channels.IndexStoreChanLen)
 	config.G.Channels.Gopher = make(chan config.IndexQuery, config.G.Channels.GopherChanLen)
+
+	// Create and initialize the internal modules.
+	storeManager := new(datastore.StoreManager)
+	statIndexer := new(datastore.MetricsIndexer)
+	statGopher := new(datastore.StatPathGopher)
+	carbonListener := new(listener.CarbonPlaintextListener)
+	storeManager.Init()
+	statIndexer.Init()
+	statGopher.Init()
+	carbonListener.Init()
 
 	// Repeat until terminated by SIGINT/SIGTERM.
 	configIsStale := false
@@ -87,8 +100,8 @@ func main() {
 	for repeat {
 
 		// Perform initialization that is repeated on every SIGHUP.
-		config.G.QuitMain = make(chan struct{}, 1)
-		config.G.QuitListener = make(chan struct{}, 1)
+		config.G.OnReload1 = make(chan struct{}, 1)
+		config.G.OnReload2 = make(chan struct{}, 1)
 
 		// Re-read the configuration to get any updated values.
 		if configIsStale && confFile != "" {
@@ -98,21 +111,11 @@ func main() {
 			}
 		}
 
-		// Start the StoreManager.
-		ds := new(datastore.StoreManager)
-		ds.Init()
-
-		// Start the Indexer
-		statIndexer := new(datastore.MetricsIndexer)
-		statIndexer.Init()
-
-		// Start the StatPathGopher
-		statGopher := new(datastore.StatPathGopher)
-		statGopher.Init()
-
-		// Start the Carbon listener last.
-		cpl := new(listener.CarbonPlaintextListener)
-		cpl.Init()
+		// Start the internal modules, Carbon listener last.
+		storeManager.Start()
+		statIndexer.Start()
+		statGopher.Start()
+		carbonListener.Start()
 
 		// Start Cassabon Web API
 		api := new(api.CassabonAPI)
@@ -124,15 +127,21 @@ func main() {
 		case <-sighup:
 			config.G.Log.System.LogInfo("Received SIGHUP")
 			configIsStale = true
-			api.Stop()               // Notify API to stop
-			close(config.G.QuitMain) // Notify all goroutines to exit
-			config.G.WG.Wait()       // Wait for them to exit
+			api.Stop()                  // Notify API to stop
+			close(config.G.OnReload1)   // Notify all externally-listening goroutines to exit
+			config.G.OnReload1WG.Wait() // Wait for them to exit
+			close(config.G.OnReload2)   // Notify all reloadable goroutines to exit
+			config.G.OnReload2WG.Wait() // Wait for them to exit
 			logging.Reopen()
 		case <-sigterm:
 			config.G.Log.System.LogInfo("Received SIGINT/SIGTERM, preparing to terminate")
-			api.Stop()               // Notify API to stop
-			close(config.G.QuitMain) // Notify all goroutines to exit
-			config.G.WG.Wait()       // Wait for them to exit
+			api.Stop()                  // Notify API to stop
+			close(config.G.OnReload1)   // Notify all externally-listening goroutines to exit
+			config.G.OnReload1WG.Wait() // Wait for them to exit
+			close(config.G.OnReload2)   // Notify all reloadable goroutines to exit
+			config.G.OnReload2WG.Wait() // Wait for them to exit
+			close(config.G.OnExit)      // Notify all persistent goroutines to exit
+			config.G.OnExitWG.Wait()    // Wait for them to exit
 			repeat = false
 		}
 	}

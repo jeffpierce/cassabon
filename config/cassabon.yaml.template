@@ -16,8 +16,9 @@ statsd:
             key: "cassabon.carbon.received.failure"
             samplerate: 1.0
 channels:
-    dataStorechanlen: 10
-    indexerchanlen: 10
+    datastorechanlen: 10
+    statstorechanlen: 10
+    indexstorechanlen: 10
     gopherchanlen: 100
 api:
     address: "127.0.0.1"
@@ -27,10 +28,6 @@ parameters:
     listener:
         tcptimeout: 5
         udptimeout: 5
-    datastore:
-        maxpendingmetrics: 25
-        maxflushdelay: 5
-        todochanlen: 3
 redis:
     index:
         addr:

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"regexp"
 	"sync"
 	"time"
 
@@ -24,11 +25,14 @@ type RollupMethod int
 
 // The valid rollup methods.
 const (
-	Average RollupMethod = iota
-	Max
-	Min
-	Sum
+	AVERAGE RollupMethod = iota
+	MAX
+	MIN
+	SUM
 )
+
+// The string that represents the catchall rollup.
+const CATCHALL_EXPRESSION = "default"
 
 // RollupWindow is the definition of one rollup interval.
 type RollupWindow struct {
@@ -38,9 +42,9 @@ type RollupWindow struct {
 
 // RollupDef is the definition of how to process a path expression.
 type RollupDef struct {
-	Method    RollupMethod
-	MaxWindow time.Duration
-	Windows   []RollupWindow
+	Method     RollupMethod
+	Expression *regexp.Regexp
+	Windows    []RollupWindow
 }
 
 // The globally accessible configuration and state object.
@@ -50,18 +54,25 @@ var G Globals
 type Globals struct {
 
 	// Goroutine management.
-	QuitMain     chan struct{}
-	QuitListener chan struct{}
-	WG           sync.WaitGroup
+	// Note: Anything that accepts input should shut down first, so it should
+	// monitor OnReload1. Everything else should monitor OnReload2.
+	OnReload1   chan struct{}
+	OnReload2   chan struct{}
+	OnExit      chan struct{}
+	OnReload1WG sync.WaitGroup
+	OnReload2WG sync.WaitGroup
+	OnExitWG    sync.WaitGroup
 
 	// Channels for sending metrics between modules.
 	Channels struct {
-		DataStore        chan CarbonMetric
-		DataStoreChanLen int
-		Indexer          chan CarbonMetric
-		IndexerChanLen   int
-		Gopher           chan IndexQuery
-		GopherChanLen    int
+		DataStore         chan CarbonMetric
+		DataStoreChanLen  int
+		StatStore         chan CarbonMetric
+		StatStoreChanLen  int
+		IndexStore        chan CarbonMetric
+		IndexStoreChanLen int
+		Gopher            chan IndexQuery
+		GopherChanLen     int
 	}
 
 	// Integration into local filesystem and remote services.
@@ -103,11 +114,6 @@ type Globals struct {
 		Listener struct {
 			TCPTimeout int
 			UDPTimeout int
-		}
-		DataStore struct {
-			MaxPendingMetrics int
-			MaxFlushDelay     int
-			TodoChanLen       int
 		}
 	}
 }

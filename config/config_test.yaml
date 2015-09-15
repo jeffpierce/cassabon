@@ -29,5 +29,7 @@ statsd:
     port: 8125
 rollups:
     default:
-        - "10s:6h"
-        - "1m:1d"
+        retention:
+            - "10s:6h"
+            - "1m:1d"
+        aggregation: average

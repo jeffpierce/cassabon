@@ -38,19 +38,15 @@ type CassabonConfig struct {
 	Statsd   StatsdSettings
 	Rollups  map[string]RollupSettings // Map of regex and rollups
 	Channels struct {
-		DataStoreChanLen int // Length of the DataStore channel
-		IndexerChanLen   int // Length of the Indexer channel
-		GopherChanLen    int // Length of the StatGopher channel
+		DataStoreChanLen  int // Length of the DataStore channel
+		StatStoreChanLen  int // Length of the StatStore channel
+		IndexStoreChanLen int // Length of the Indexer channel
+		GopherChanLen     int // Length of the StatGopher channel
 	}
 	Parameters struct {
 		Listener struct {
 			TCPTimeout int
 			UDPTimeout int
-		}
-		DataStore struct {
-			MaxPendingMetrics int
-			MaxFlushDelay     int
-			TodoChanLen       int
 		}
 	}
 }
@@ -137,12 +133,19 @@ func ParseStartupValues() {
 	if G.Channels.DataStoreChanLen > 1000 {
 		G.Channels.DataStoreChanLen = 1000
 	}
-	G.Channels.IndexerChanLen = rawCassabonConfig.Channels.IndexerChanLen
-	if G.Channels.IndexerChanLen < 10 {
-		G.Channels.IndexerChanLen = 10
+	G.Channels.StatStoreChanLen = rawCassabonConfig.Channels.StatStoreChanLen
+	if G.Channels.StatStoreChanLen < 5 {
+		G.Channels.StatStoreChanLen = 5
 	}
-	if G.Channels.IndexerChanLen > 1000 {
-		G.Channels.IndexerChanLen = 1000
+	if G.Channels.StatStoreChanLen > 100 {
+		G.Channels.StatStoreChanLen = 100
+	}
+	G.Channels.IndexStoreChanLen = rawCassabonConfig.Channels.IndexStoreChanLen
+	if G.Channels.IndexStoreChanLen < 10 {
+		G.Channels.IndexStoreChanLen = 10
+	}
+	if G.Channels.IndexStoreChanLen > 1000 {
+		G.Channels.IndexStoreChanLen = 1000
 	}
 	G.Channels.GopherChanLen = rawCassabonConfig.Channels.GopherChanLen
 	if G.Channels.GopherChanLen < 10 {
@@ -184,29 +187,6 @@ func ParseRefreshableValues() {
 		G.Parameters.Listener.UDPTimeout = 30
 	}
 
-	// Copy in and sanitize the DataStore internal parameters.
-	G.Parameters.DataStore.MaxPendingMetrics = rawCassabonConfig.Parameters.DataStore.MaxPendingMetrics
-	if G.Parameters.DataStore.MaxPendingMetrics < 1 {
-		G.Parameters.DataStore.MaxPendingMetrics = 1
-	}
-	if G.Parameters.DataStore.MaxPendingMetrics > 500 {
-		G.Parameters.DataStore.MaxPendingMetrics = 500
-	}
-	G.Parameters.DataStore.MaxFlushDelay = rawCassabonConfig.Parameters.DataStore.MaxFlushDelay
-	if G.Parameters.DataStore.MaxFlushDelay < 1 {
-		G.Parameters.DataStore.MaxFlushDelay = 1
-	}
-	if G.Parameters.DataStore.MaxFlushDelay > 30 {
-		G.Parameters.DataStore.MaxFlushDelay = 30
-	}
-	G.Parameters.DataStore.TodoChanLen = rawCassabonConfig.Parameters.DataStore.TodoChanLen
-	if G.Parameters.DataStore.TodoChanLen < 5 {
-		G.Parameters.DataStore.TodoChanLen = 5
-	}
-	if G.Parameters.DataStore.TodoChanLen > 100 {
-		G.Parameters.DataStore.TodoChanLen = 100
-	}
-
 	// Validate, copy in and normalize the rollup definitions.
 	G.RollupPriority = make([]string, 0, len(rawCassabonConfig.Rollups))
 	G.Rollup = make(map[string]RollupDef)
@@ -225,23 +205,30 @@ func ParseRefreshableValues() {
 		// Validate and decode the aggregation method.
 		switch strings.ToLower(v.Aggregation) {
 		case "average":
-			method = Average
+			method = AVERAGE
 		case "max":
-			method = Max
+			method = MAX
 		case "min":
-			method = Min
+			method = MIN
 		case "sum":
-			method = Sum
+			method = SUM
 		default:
 			G.Log.System.LogWarn("Invalid aggregation method for \"%s\": %s", expression, v.Aggregation)
 			continue
 		}
 
-		// Record the regular expression and its aggregation method.
-		G.RollupPriority = append(G.RollupPriority, expression)
+		// Build up the rollup definitions for this regular expression.
 		rd = new(RollupDef)
 		rd.Method = method
 		rd.Windows = make([]RollupWindow, 0)
+		if expression != CATCHALL_EXPRESSION {
+			if re, err := regexp.Compile(expression); err == nil {
+				rd.Expression = re
+			} else {
+				G.Log.System.LogWarn("Malformed regular expression for \"%s\": %v", expression, err)
+				continue
+			}
+		}
 
 		// Parse and validate each window:retention pair.
 		for _, s := range v.Retention {
@@ -256,6 +243,12 @@ func ParseRefreshableValues() {
 			// Convert the window to a time.Duration.
 			if window, err = time.ParseDuration(couplet[0]); err != nil {
 				G.Log.System.LogWarn("Malformed window for \"%s\": %s %s", expression, s, couplet[0])
+				continue
+			}
+
+			// Don't permit windows shorter than 1 second.
+			if window < time.Second {
+				G.Log.System.LogWarn("Duration less than minimum 1 second for \"%s\": %v", expression, window)
 				continue
 			}
 
@@ -288,12 +281,35 @@ func ParseRefreshableValues() {
 
 			// Append to the rollups for this expression.
 			rd.Windows = append(rd.Windows, RollupWindow{window, retention})
-			if rd.MaxWindow < window {
-				rd.MaxWindow = window
+		}
+
+		// If any of the rollup window definitions were valid, add expression to the list.
+		if len(rd.Windows) > 0 {
+
+			// Sort windows into ascending duration order, and validate.
+			sort.Sort(ByWindow(rd.Windows))
+			shortestDuration := rd.Windows[0].Window
+			allExactMultiples := true
+			for i, v := range rd.Windows {
+				if i > 0 {
+					remainder := v.Window % shortestDuration
+					if remainder != 0 {
+						G.Log.System.LogWarn(
+							"Next duration is not a multiple for \"%s\": %v %% %v remainder is %v",
+							expression, v.Window, shortestDuration, remainder)
+						allExactMultiples = false
+					}
+				}
+			}
+
+			// If all durations are exact multiples of the shortest duration, save this expression.
+			if allExactMultiples {
+				G.Rollup[expression] = *rd
+				G.RollupPriority = append(G.RollupPriority, expression)
+			} else {
+				G.Log.System.LogWarn("Rollup expression rejected: \"%s\"", expression)
 			}
 		}
-		sort.Sort(ByWindow(rd.Windows))
-		G.Rollup[expression] = *rd
 	}
 
 	// Sort the path expressions into priority order.
@@ -327,10 +343,10 @@ func (p ByPriority) Swap(i, j int) {
 func (p ByPriority) Less(i, j int) bool {
 
 	// "default" is always last in priority.
-	if p[i] == "default" {
+	if p[i] == CATCHALL_EXPRESSION {
 		return false
 	}
-	if p[j] == "default" {
+	if p[j] == CATCHALL_EXPRESSION {
 		return true
 	}
 
