@@ -30,7 +30,7 @@ func (indexer *MetricsIndexer) run() {
 
 	// Initialize Redis client pool.
 	if config.G.Redis.Index.Sentinel {
-		config.G.Log.System.LogDebug("Initializing Indexer Redis client (Sentinel)...")
+		config.G.Log.System.LogDebug("Indexer initializing Redis client (Sentinel)...")
 		indexer.rc = middleware.RedisFailoverClient(
 			config.G.Redis.Index.Addr,
 			config.G.Redis.Index.Pwd,
@@ -38,7 +38,7 @@ func (indexer *MetricsIndexer) run() {
 			config.G.Redis.Index.DB,
 		)
 	} else {
-		config.G.Log.System.LogDebug("Initializing Indexer Redis client...")
+		config.G.Log.System.LogDebug("Indexer initializing Redis client...")
 		indexer.rc = middleware.RedisClient(
 			config.G.Redis.Index.Addr,
 			config.G.Redis.Index.Pwd,
@@ -48,11 +48,11 @@ func (indexer *MetricsIndexer) run() {
 
 	if indexer.rc == nil {
 		// Make sure we have a good Redis client.  Without it, we can't do our job, so log, whine, and crash.
-		config.G.Log.System.LogFatal("Unable to connect to Redis for indexer at %v.", config.G.Redis.Index.Addr)
+		config.G.Log.System.LogFatal("Indexer unable to connect to Redis at %v", config.G.Redis.Index.Addr)
 		os.Exit(10)
 	}
 
-	config.G.Log.System.LogDebug("Indexer client initialized.")
+	config.G.Log.System.LogDebug("Indexer Redis client initialized")
 	defer indexer.rc.Close()
 
 	// Wait for entries to arrive, and process them.
@@ -63,15 +63,15 @@ func (indexer *MetricsIndexer) run() {
 			config.G.OnReload2WG.Done()
 			return
 		case metric := <-config.G.Channels.IndexStore:
-			config.G.Log.System.LogDebug("Indexer received metric: %v", metric)
-			go indexer.indexMetricPath(metric.Path)
+			indexer.index(metric.Path)
 		}
 	}
 }
 
 // IndexMetricPath takes a metric path string and redis client, starts a pipeline, splits the metric,
 // and sends it off to be processed by processMetricPath().
-func (indexer *MetricsIndexer) indexMetricPath(path string) {
+func (indexer *MetricsIndexer) index(path string) {
+	config.G.Log.System.LogDebug("Indexer::index path=%s", path)
 	splitPath := strings.Split(path, ".")
 	indexer.processMetricPath(splitPath, len(splitPath), true)
 }
@@ -98,10 +98,9 @@ func (indexer *MetricsIndexer) processMetricPath(splitPath []string, pathLen int
 			bigE,
 			strings.Join(splitPath, "."),
 			strconv.FormatBool(isLeaf)}, ":")
+		config.G.Log.System.LogDebug("Indexer indexing \"%s\"", metricPath)
 
 		z := redis.Z{0, metricPath}
-
-		config.G.Log.System.LogDebug("Indexing metric %s", metricPath)
 
 		// Put it in the pipeline.
 		pipe.ZAdd("cassabon", z)
@@ -116,7 +115,5 @@ func (indexer *MetricsIndexer) processMetricPath(splitPath []string, pathLen int
 	if err != nil {
 		// How do we want to degrade gracefully when this fails?
 		config.G.Log.System.LogError("Redis error: %v", err)
-	} else {
-		config.G.Log.System.LogDebug("Finished processing full metric path.")
 	}
 }
