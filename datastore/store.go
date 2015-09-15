@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/jeffpierce/cassabon/config"
+	"github.com/jeffpierce/cassabon/logging"
 )
 
 // rollup contains the accumulated metrics data for a path.
@@ -194,6 +195,9 @@ func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 // flush persists the accumulated metrics to the database.
 func (sm *StoreManager) flush(terminating bool) {
 	config.G.Log.System.LogDebug("StoreManager::flush terminating=%v", terminating)
+
+	// Report the current length of the list of unique paths seen.
+	logging.Statsd.Client.Gauge("path.count", int64(len(sm.byPath)), 1.0)
 
 	// Use a consistent current time for all tests in this cycle.
 	baseTime := time.Now()
