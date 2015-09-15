@@ -36,49 +36,51 @@ func (gopher *StatPathGopher) Start() {
 }
 
 func (gopher *StatPathGopher) run() {
-	// Initalize redis client
+
+	// Initalize Redis client pool.
+	var err error
 	if config.G.Redis.Index.Sentinel {
-		config.G.Log.System.LogDebug("Initializing Stat Path Gopher Redis client (Sentinel)...")
-		gopher.rc = middleware.RedisFailoverClient(
+		config.G.Log.System.LogDebug("Gopher initializing Redis client (Sentinel)")
+		gopher.rc, err = middleware.RedisFailoverClient(
 			config.G.Redis.Index.Addr,
 			config.G.Redis.Index.Pwd,
 			config.G.Redis.Index.Master,
 			config.G.Redis.Index.DB,
 		)
 	} else {
-		config.G.Log.System.LogDebug("Initializing Stat Path Gopher Redis client...")
-		gopher.rc = middleware.RedisClient(
+		config.G.Log.System.LogDebug("Gopher initializing Redis client")
+		gopher.rc, err = middleware.RedisClient(
 			config.G.Redis.Index.Addr,
 			config.G.Redis.Index.Pwd,
 			config.G.Redis.Index.DB,
 		)
 	}
 
-	if gopher.rc == nil {
-		// Can't connect to Redis.  Log, whine, crash.
-		config.G.Log.System.LogFatal("Unable to connect to Redis for Gopher at %v", config.G.Redis.Index.Addr)
+	if err != nil {
+		// Make sure we have a good Redis client.  Without it, we can't do our job, so log, whine, and crash.
+		config.G.Log.System.LogFatal("Gopher unable to connect to Redis at %v: %v", config.G.Redis.Index.Addr, err)
 		os.Exit(11)
 	}
 
 	defer gopher.rc.Close()
-	config.G.Log.System.LogDebug("Gopher redis client initialized.")
+	config.G.Log.System.LogDebug("Gopher Redis client initialized")
 
-	// Wait for a stat path query to arrive, then process it.
+	// Wait for queries to arrive, and process them.
 	for {
 		select {
 		case <-config.G.OnReload2:
 			config.G.Log.System.LogDebug("Gopher::run received QUIT message")
 			config.G.OnReload2WG.Done()
 			return
-
 		case gopherQuery := <-config.G.Channels.Gopher:
-			config.G.Log.System.LogDebug("Gopher received a channel, processing...")
 			go gopher.query(gopherQuery)
 		}
 	}
 }
 
 func (gopher *StatPathGopher) query(q config.IndexQuery) {
+	config.G.Log.System.LogDebug("Gopher::query %v", q.Query)
+
 	// Listen to the channel, get string query.
 	statQuery := q.Query
 

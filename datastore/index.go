@@ -29,31 +29,32 @@ func (indexer *MetricsIndexer) Start() {
 func (indexer *MetricsIndexer) run() {
 
 	// Initialize Redis client pool.
+	var err error
 	if config.G.Redis.Index.Sentinel {
-		config.G.Log.System.LogDebug("Indexer initializing Redis client (Sentinel)...")
-		indexer.rc = middleware.RedisFailoverClient(
+		config.G.Log.System.LogDebug("Indexer initializing Redis client (Sentinel)")
+		indexer.rc, err = middleware.RedisFailoverClient(
 			config.G.Redis.Index.Addr,
 			config.G.Redis.Index.Pwd,
 			config.G.Redis.Index.Master,
 			config.G.Redis.Index.DB,
 		)
 	} else {
-		config.G.Log.System.LogDebug("Indexer initializing Redis client...")
-		indexer.rc = middleware.RedisClient(
+		config.G.Log.System.LogDebug("Indexer initializing Redis client")
+		indexer.rc, err = middleware.RedisClient(
 			config.G.Redis.Index.Addr,
 			config.G.Redis.Index.Pwd,
 			config.G.Redis.Index.DB,
 		)
 	}
 
-	if indexer.rc == nil {
+	if err != nil {
 		// Make sure we have a good Redis client.  Without it, we can't do our job, so log, whine, and crash.
-		config.G.Log.System.LogFatal("Indexer unable to connect to Redis at %v", config.G.Redis.Index.Addr)
+		config.G.Log.System.LogFatal("Indexer unable to connect to Redis at %v: %v", config.G.Redis.Index.Addr, err)
 		os.Exit(10)
 	}
 
-	config.G.Log.System.LogDebug("Indexer Redis client initialized")
 	defer indexer.rc.Close()
+	config.G.Log.System.LogDebug("Indexer Redis client initialized")
 
 	// Wait for entries to arrive, and process them.
 	for {
