@@ -2,8 +2,6 @@
 package datastore
 
 import (
-	"encoding/binary"
-	"encoding/hex"
 	"os"
 	"strconv"
 	"strings"
@@ -89,14 +87,10 @@ func (indexer *MetricsIndexer) processMetricPath(splitPath []string, pathLen int
 	pipe := indexer.rc.Pipeline()
 
 	for pathLen > 0 {
-		// Let's get our big endian representation of the length.
-		a := make([]byte, 2)
-		binary.BigEndian.PutUint16(a, uint16(pathLen))
-		bigE := hex.EncodeToString(a)
 
 		// Construct the metric string
 		metricPath := strings.Join([]string{
-			bigE,
+			middleware.ToBigEndianString(pathLen),
 			strings.Join(splitPath, "."),
 			strconv.FormatBool(isLeaf)}, ":")
 		config.G.Log.System.LogDebug("Indexer indexing \"%s\"", metricPath)
