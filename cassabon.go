@@ -22,7 +22,6 @@ func main() {
 	// Get options provided on the command line.
 	flag.StringVar(&confFile, "conf", "config/cassabon.yaml", "Location of YAML configuration file.")
 	flag.StringVar(&config.G.Log.Logdir, "logdir", "", "Name of directory to contain log files (stderr if unspecified)")
-	flag.StringVar(&config.G.Log.Loglevel, "loglevel", "", "Log level: debug|info|warn|error|fatal")
 	flag.Parse()
 
 	// Fill in startup values not provided on the command line, if available.
@@ -107,6 +106,8 @@ func main() {
 			config.G.Log.System.LogInfo("Reading configuration file %s", confFile)
 			if err := config.ReadConfigurationFile(confFile, true); err == nil {
 				config.ParseRefreshableValues()
+				sev, _ := logging.TextToSeverity(config.G.Log.Loglevel)
+				config.G.Log.System.SetLogLevel(sev)
 			}
 		}
 

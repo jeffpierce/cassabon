@@ -117,9 +117,9 @@ func ParseStartupValues() {
 	if G.Log.Logdir == "" {
 		G.Log.Logdir = rawCassabonConfig.Logging.Logdir
 	}
-	if G.Log.Loglevel == "" {
-		G.Log.Loglevel = rawCassabonConfig.Logging.Loglevel
-	}
+
+	// We need the log level at startup to initialize the loggers.
+	G.Log.Loglevel = rawCassabonConfig.Logging.Loglevel
 
 	// Copy in the statsd configuration.
 	G.Statsd = rawCassabonConfig.Statsd
@@ -149,6 +149,9 @@ func ParseStartupValues() {
 }
 
 func ParseRefreshableValues() {
+
+	// We can dynamically change the logging level.
+	G.Log.Loglevel = rawCassabonConfig.Logging.Loglevel
 
 	// Copy in the addresses of the services we offer.
 	G.API.Address = rawCassabonConfig.API.Address
