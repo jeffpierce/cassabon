@@ -43,7 +43,7 @@ func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string) {
 	tcpListener, err := net.ListenTCP("tcp4", tcpaddr)
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
-		config.G.Log.System.LogFatal("Cannot listen for Carbon on TCP address %s: %v", tcpListener.Addr().String(), err)
+		config.G.Log.System.LogFatal("Cannot listen for Carbon on TCP: %v", err)
 		os.Exit(3)
 	}
 	defer tcpListener.Close()
@@ -92,7 +92,7 @@ func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
 	udpConn, err := net.ListenUDP("udp", udpaddr)
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
-		config.G.Log.System.LogFatal("Cannot listen for Carbon on UDP address %s: %v", udpConn.LocalAddr().String(), err)
+		config.G.Log.System.LogFatal("Cannot listen for Carbon on UDP: %v", err)
 		os.Exit(3)
 	}
 	defer udpConn.Close()
