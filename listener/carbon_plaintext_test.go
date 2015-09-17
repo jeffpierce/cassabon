@@ -12,8 +12,7 @@ import (
 
 func TestCarbonSocket(t *testing.T) {
 
-	config.G.Log.System = logging.NewLogger("system", "", logging.Fatal)
-	config.G.Log.Carbon = logging.NewLogger("carbon", "", logging.Fatal)
+	config.G.Log.System = logging.NewLogger("system", "", logging.Info)
 	logging.Statsd.Open("", "", "cassabon")
 
 	fmt.Println("Testing TCP socket connection...")
