@@ -176,7 +176,7 @@ func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 		}
 	case config.MIN:
 		for i, v := range currentRollup.value {
-			if v > metric.Value {
+			if v > metric.Value || currentRollup.count[i] == 0 {
 				currentRollup.value[i] = metric.Value
 			}
 		}
