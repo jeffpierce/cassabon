@@ -345,9 +345,11 @@ func (p ByPriority) Less(i, j int) bool {
 		return true
 	}
 
-	// Longer strings are higher priority.
+	// Longer strings sort earlier.
 	if len(p[i]) > len(p[j]) {
 		return true
+	} else if len(p[i]) < len(p[j]) {
+		return false
 	}
 
 	// Same-length strings are ordered lexically.
