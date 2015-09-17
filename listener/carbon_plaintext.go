@@ -107,10 +107,10 @@ func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
 	 * To resolve this, we only dispatch the part of the buffer up to the last newline,
 	 * and save the remainder for prepending to the next incoming buffer.
 	 */
-	line := ""                   // The (possibly concatenated) line to be dispatched
-	buf := make([]byte, 4096)    // The buffer into which UDP messages will be read
-	remBuf := make([]byte, 4096) // The buffer into which data following last newline will be copied
-	remBytes := 0                // The number of data bytes in remBuf
+	line := ""                    // The (possibly concatenated) line to be dispatched
+	buf := make([]byte, 16384)    // The buffer into which UDP messages will be read
+	remBuf := make([]byte, 16384) // The buffer into which data following last newline will be copied
+	remBytes := 0                 // The number of data bytes in remBuf
 	for {
 		select {
 		case <-config.G.OnReload1:
