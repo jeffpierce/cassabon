@@ -43,7 +43,7 @@ func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string) {
 	tcpListener, err := net.ListenTCP("tcp4", tcpaddr)
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
-		config.G.Log.System.LogFatal("Cannot listen for Carbon on TCP address %s: %v", tcpListener.Addr().String(), err)
+		config.G.Log.System.LogFatal("Cannot listen for Carbon on TCP: %v", err)
 		os.Exit(3)
 	}
 	defer tcpListener.Close()
@@ -92,7 +92,7 @@ func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
 	udpConn, err := net.ListenUDP("udp", udpaddr)
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
-		config.G.Log.System.LogFatal("Cannot listen for Carbon on UDP address %s: %v", udpConn.LocalAddr().String(), err)
+		config.G.Log.System.LogFatal("Cannot listen for Carbon on UDP: %v", err)
 		os.Exit(3)
 	}
 	defer udpConn.Close()
@@ -173,7 +173,7 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 	splitMetric := strings.Fields(line)
 	if len(splitMetric) != 3 {
 		// Log this as a Warn, because it's the client's error, not ours.
-		config.G.Log.Carbon.LogWarn("Malformed metric, expected 3 fields, found %d: \"%s\"", len(splitMetric), line)
+		config.G.Log.System.LogWarn("Malformed Carbon metric, expected 3 fields, found %d: \"%s\"", len(splitMetric), line)
 		logging.Statsd.Client.Inc(config.G.Statsd.Events.ReceiveFail.Key, 1, config.G.Statsd.Events.ReceiveFail.SampleRate)
 		return
 	}
@@ -184,7 +184,7 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 	// Pull out and validate the second field from the triplet.
 	val, err := strconv.ParseFloat(splitMetric[1], 64)
 	if err != nil {
-		config.G.Log.Carbon.LogWarn("Malformed metric, cannnot parse value as float: \"%s\"", splitMetric[1])
+		config.G.Log.System.LogWarn("Malformed Carbon metric, cannnot parse value as float: \"%s\"", splitMetric[1])
 		logging.Statsd.Client.Inc(config.G.Statsd.Events.ReceiveFail.Key, 1, config.G.Statsd.Events.ReceiveFail.SampleRate)
 		return
 	}
@@ -192,7 +192,7 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 	// Pull out and validate the third field from the triplet.
 	ts, err := strconv.ParseFloat(splitMetric[2], 64)
 	if err != nil {
-		config.G.Log.Carbon.LogWarn("Malformed metric, cannnot parse timestamp as float: \"%s\"", splitMetric[2])
+		config.G.Log.System.LogWarn("Malformed Carbon metric, cannnot parse timestamp as float: \"%s\"", splitMetric[2])
 		logging.Statsd.Client.Inc(config.G.Statsd.Events.ReceiveFail.Key, 1, config.G.Statsd.Events.ReceiveFail.SampleRate)
 		return
 	}

@@ -1,35 +1,100 @@
 logging:
     logdir: ""
     loglevel: "info"
-cassandra:
-    hosts:
-        - "127.0.0.1"
-        - "localhost"
-    port: 9000
+carbon:
+    address: "127.0.0.1"
+    port: 2003
+    protocol: "tcp"
+statsd:
+    host: "127.0.0.1"
+    port: 8125
+    events:
+        receiveok:
+            key: "carbon.received.success"
+            samplerate: 1.0
+        receivefail:
+            key: "carbon.received.failure"
+            samplerate: 1.0
+channels:
+    datastorechanlen: 10
+    indexstorechanlen: 10
+    gopherchanlen: 100
 api:
-    address: "0.0.0.0"
+    address: "127.0.0.1"
     port: 8080
+    healthcheckfile: "config/healthcheckfile"
+parameters:
+    listener:
+        tcptimeout: 5
+        udptimeout: 5
 redis:
     index:
-        sentinel: false
         addr:
             - "127.0.0.1:6379"
-        db: 0
+        db: 5
+        pwd: ""
+        sentinel: false
+        master: ""
     queue:
-        sentinel: true
         addr:
-            - "127.0.0.1:26379"
-        db: 1
-carbon:
-    address: "0.0.0.0"
-    port: 2003
-    protocol: "udp"
-statsd:
-    host: "localhost"
-    port: 8125
+            - "127.0.0.1:6379"
+        db: 6
+        pwd: ""
+        sentinel: false
+        master: ""
 rollups:
-    default:
-        retention:
-            - "10s:6h"
-            - "1m:1d"
-        aggregation: average
+  ^foo.*:
+    retention:
+      - 6s:30m
+      - 1m:30d
+      - 1h:1y
+    aggregation: sum
+  ^foo2.*:
+    retention:
+      - 15ms:30m
+      - 7s:30m
+      - 1m:30d
+      - 1h:1y
+    aggregation: average
+  ^foo1.*:
+    retention:
+      - 1m:30d
+      - 1h:1y
+      - 6s:30m
+    aggregation: sum
+  ^bar.*:
+    retention:
+      - 10s:1h
+      - 1m:30d
+    aggregation: max
+  ^bar.baz.*:
+    retention:
+      - 10s:1h
+      - 1m:30d
+    aggregation: min
+  ^bar.quux.*:
+    retention:
+      - 10s:1h
+      - 1m:30d
+    aggregation: max
+  ^bar.zoom1.*:
+    retention:
+      - 10s:1h
+    aggregation: garbage
+  ^bar.zoom2.*:
+    retention:
+      - 10q:1h
+    aggregation: sum
+  ^bar.(zoom2.*:
+    retention:
+      - 10q:1h
+    aggregation: sum
+  default:
+    retention:
+      - 15s:1d
+      - 15s-1d
+      - 1h:30d
+      - 1h:3w
+      - 1h:3
+      - 1h:3z
+    aggregation: average
