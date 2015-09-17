@@ -12,6 +12,9 @@ build
 config/cassabon.yaml
 config/healthcheckfile
 
+# Build artifacts
+devtools/stresstest
+
 # Architecture specific extensions/prefixes
 *.[568vq]
 [568vq].out
