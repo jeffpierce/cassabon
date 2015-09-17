@@ -220,11 +220,13 @@ func (sm *StoreManager) flush(terminating bool) {
 					// Has any data accumulated while the window was open?
 					if rollup.count[i] > 0 {
 						// TODO: Write the data to persistent storage.
-						config.G.Log.System.LogDebug("Writing %-15s win=%v ret=%v path=%s value=%v ts=%v",
+						config.G.Log.System.LogInfo("Write expr=%s win=%v ret=%v ts=%v path=%s value=%.4f",
 							expr,
 							sm.rollup[expr].Windows[i].Window,
 							sm.rollup[expr].Windows[i].Retention,
-							path, rollup.value[i], windowEnd.Format("15:04:05.000"))
+							windowEnd.Format("15:04:05.000"),
+							path,
+							rollup.value[i])
 					}
 
 					// Ensure the bucket is empty for the next open window.
