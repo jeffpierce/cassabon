@@ -1,10 +1,14 @@
 package datastore
 
 import (
+	"os"
 	"time"
+
+	"github.com/gocql/gocql"
 
 	"github.com/jeffpierce/cassabon/config"
 	"github.com/jeffpierce/cassabon/logging"
+	"github.com/jeffpierce/cassabon/middleware"
 )
 
 // rollup contains the accumulated metrics data for a path.
@@ -30,6 +34,9 @@ type StoreManager struct {
 	// Timer management.
 	setTimeout chan time.Duration // Write a duration to this to get a notification on timeout channel
 	timeout    chan struct{}      // Timeout notifications arrive on this channel
+
+	// Database connection.
+	dbClient *gocql.Session
 
 	// Rollup data.
 	byPath map[string]*rollup  // Stats, by path, for rollup accumulation
@@ -87,7 +94,23 @@ func (sm *StoreManager) Start() {
 
 func (sm *StoreManager) run() {
 
-	// TODO: Open connection to the Cassandra database here, so we can defer the close.
+	// Open connection to the Cassandra database here, so we can defer the close.
+	var err error
+	config.G.Log.System.LogDebug("StoreManager initializing Cassandra client")
+	sm.dbClient, err = middleware.CassandraSession(
+		config.G.Cassandra.Hosts,
+		config.G.Cassandra.Port,
+		"cassabon",
+	)
+	if err != nil {
+		// Without Cassandra client we can't do our job, so log, whine, and crash.
+		config.G.Log.System.LogFatal("StoreManager unable to connect to Cassandra at %v, port %s: %v",
+			config.G.Cassandra.Hosts, config.G.Cassandra.Port, err)
+		os.Exit(10)
+	}
+
+	defer sm.dbClient.Close()
+	config.G.Log.System.LogDebug("StoreManager Cassandra client initialized")
 
 	for {
 		select {
