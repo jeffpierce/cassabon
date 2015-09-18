@@ -1,11 +1,13 @@
 # Makefile for the stresstest executable.
 
-TARGET = stresstest
+SRCS = stresstest.go echostats.go
 
-all: $(TARGET)
+TARGETS = $(patsubst %.go,%,$(SRCS))
 
-$(TARGET): $(TARGET).go
-	go build -o $(TARGET) $<
+all: $(TARGETS)
+
+%: %.go
+	go build -o $@ $<
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGETS)

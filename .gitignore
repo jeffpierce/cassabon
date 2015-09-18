@@ -13,6 +13,7 @@ config/cassabon.yaml
 config/healthcheckfile
 
 # Build artifacts
+devtools/echostats
 devtools/stresstest
 
 # Architecture specific extensions/prefixes
