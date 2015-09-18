@@ -65,10 +65,11 @@ func main() {
 		} else {
 			config.G.Log.System.LogInfo("Reporting to statsd at %s:%s", config.G.Statsd.Host, config.G.Statsd.Port)
 		}
-		defer logging.Statsd.Close()
 	} else {
+		logging.Statsd.Open("", "", "cassabon")
 		config.G.Log.System.LogInfo("Not reporting to statsd: specify host or IP to enable")
 	}
+	defer logging.Statsd.Close()
 
 	// Set up reload and termination signal handlers.
 	var sighup = make(chan os.Signal, 1)

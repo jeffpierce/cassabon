@@ -30,11 +30,16 @@ func (s *StatsWriter) Open(host string, port string, prefix string) error {
 	}
 	s.isOpen = true
 
-	addr := net.JoinHostPort(host, port)
-	s.Client, err = statsd.NewClient(addr, prefix)
-	if err != nil {
-		// Use the no-op client so we don't need to test everywhere.
+	// If necessary, use the no-op client so we don't need to test everywhere.
+	if host == "" {
 		s.Client, _ = statsd.NewNoopClient()
+		err = errors.New("Stats Writer not configured")
+	} else {
+		addr := net.JoinHostPort(host, port)
+		s.Client, err = statsd.NewClient(addr, prefix)
+		if err != nil {
+			s.Client, _ = statsd.NewNoopClient()
+		}
 	}
 
 	// Report memory usage stats every second.
