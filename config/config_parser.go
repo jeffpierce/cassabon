@@ -19,7 +19,7 @@ type CassabonConfig struct {
 	}
 	Cassandra struct {
 		Hosts []string // List of hostnames or IP addresses of Cassandra ring
-		Port  int      // Cassandra port
+		Port  string   // Cassandra port
 	}
 	API struct {
 		Address         string // HTTP API listens on this address
@@ -163,6 +163,7 @@ func ParseRefreshableValues() {
 	G.Carbon.Protocol = rawCassabonConfig.Carbon.Protocol
 
 	// Copy in the addresses of the services we use.
+	G.Cassandra = rawCassabonConfig.Cassandra
 	G.Redis.Index = rawCassabonConfig.Redis.Index
 	G.Redis.Queue = rawCassabonConfig.Redis.Queue
 

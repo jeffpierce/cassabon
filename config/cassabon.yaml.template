@@ -27,6 +27,10 @@ parameters:
     listener:
         tcptimeout: 5
         udptimeout: 5
+cassandra:
+    hosts:
+        - "127.0.0.1"
+    port: 9042
 redis:
     index:
         addr:
