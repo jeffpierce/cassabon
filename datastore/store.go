@@ -251,7 +251,7 @@ func (sm *StoreManager) flush(terminating bool) {
 							path,
 							rollup.value[i])
 
-						sm.write(path, baseTime, rollup.value[i])
+						sm.write(path, windowEnd, rollup.value[i])
 					}
 
 					// Ensure the bucket is empty for the next open window.
