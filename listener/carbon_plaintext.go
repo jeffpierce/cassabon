@@ -14,14 +14,57 @@ import (
 	"github.com/jeffpierce/cassabon/logging"
 )
 
+// peerState is an object used to detect changes in local host:port or in peer list.
+type peerState struct {
+	lastHost  string   // For detection of whether our local host has changed
+	lastPort  string   // For detection of whether our local port has changed
+	lastPeers []string // For detection of whether the peer list has changed
+}
+
+// isInitialized indicates whether the structure has been initialized.
+func (ps *peerState) isInitialized() bool {
+	return ps.lastHost != ""
+}
+
+// setData initializes the structure with the given data.
+func (ps *peerState) setData(host, port string, peers []string) {
+	ps.lastHost = host
+	ps.lastPort = port
+	ps.lastPeers = make([]string, len(peers))
+	for i, v := range peers {
+		ps.lastPeers[i] = v
+	}
+}
+
+// isEqual indicates whether the current configuration is equal to the prior.
+func (ps *peerState) isEqual(host, port string, peers []string) bool {
+	if ps.lastHost != host || ps.lastPort != port {
+		return false
+	}
+	if len(ps.lastPeers) != len(peers) {
+		return false
+	}
+	for i, v := range ps.lastPeers {
+		if peers[i] != v {
+			return false
+		}
+	}
+	return true
+}
+
 type CarbonPlaintextListener struct {
-	myHostPort string // host:port as actually resolved, for matching self
+	myHostPort    string    // host:port as actually resolved, for matching self
+	lastPeerState peerState // State of peer list for comparison after a reload
 }
 
 func (cpl *CarbonPlaintextListener) Init() {
+	cpl.lastPeerState = peerState{}
 }
 
 func (cpl *CarbonPlaintextListener) Start() {
+
+	// Kick off goroutines to list for TCP and/or UDP traffic as specified.
+	extraChanRead := false
 	var asResolved chan string
 	switch config.G.Carbon.Protocol {
 	case "tcp":
@@ -34,10 +77,29 @@ func (cpl *CarbonPlaintextListener) Start() {
 		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port, asResolved)
 	default:
 		asResolved = make(chan string, 2)
+		extraChanRead = true
 		config.G.OnReload1WG.Add(2)
 		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port, asResolved)
 		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port, asResolved)
-		_ = <-asResolved // Read this to empty the channel and prevent race on close()
+	}
+
+	// Determine whether we need to clear the rollup accumulators.
+	if !cpl.lastPeerState.isInitialized() {
+		// On first time here, initialize with current peer state.
+		cpl.lastPeerState.setData(config.G.Carbon.Address, config.G.Carbon.Port, config.G.Carbon.Peers)
+	} else {
+		// Clear out our local accumulators if the peer list changed in any way.
+		if !cpl.lastPeerState.isEqual(config.G.Carbon.Address, config.G.Carbon.Port, config.G.Carbon.Peers) {
+			config.G.Log.System.LogDebug("peerState::isEqual(): false")
+			config.G.OnPeerChangeReq <- struct{}{}
+			<-config.G.OnPeerChangeRsp
+			cpl.lastPeerState.setData(config.G.Carbon.Address, config.G.Carbon.Port, config.G.Carbon.Peers)
+		}
+	}
+
+	// Unblock the listeners.
+	if extraChanRead {
+		<-asResolved // Read this to empty the channel and prevent race on close()
 	}
 	cpl.myHostPort = <-asResolved // Doesn't matter which one wins, they're the same
 	close(asResolved)
