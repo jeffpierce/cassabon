@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeffpierce/cassabon/config"
 	"github.com/jeffpierce/cassabon/logging"
+	"github.com/jeffpierce/cassabon/pearson"
 )
 
 // peerState is an object used to detect changes in local host:port or in peer list.
@@ -63,26 +64,6 @@ func (cpl *CarbonPlaintextListener) Init() {
 
 func (cpl *CarbonPlaintextListener) Start() {
 
-	// Kick off goroutines to list for TCP and/or UDP traffic as specified.
-	extraChanRead := false
-	var asResolved chan string
-	switch config.G.Carbon.Protocol {
-	case "tcp":
-		asResolved = make(chan string, 1)
-		config.G.OnReload1WG.Add(1)
-		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port, asResolved)
-	case "udp":
-		asResolved = make(chan string, 1)
-		config.G.OnReload1WG.Add(1)
-		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port, asResolved)
-	default:
-		asResolved = make(chan string, 2)
-		extraChanRead = true
-		config.G.OnReload1WG.Add(2)
-		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port, asResolved)
-		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port, asResolved)
-	}
-
 	// Determine whether we need to clear the rollup accumulators.
 	if !cpl.lastPeerState.isInitialized() {
 		// On first time here, initialize with current peer state.
@@ -96,17 +77,25 @@ func (cpl *CarbonPlaintextListener) Start() {
 			cpl.lastPeerState.setData(config.G.Carbon.Address, config.G.Carbon.Port, config.G.Carbon.Peers)
 		}
 	}
+	cpl.myHostPort = config.G.Carbon.Address + ":" + config.G.Carbon.Port
 
-	// Unblock the listeners.
-	if extraChanRead {
-		<-asResolved // Read this to empty the channel and prevent race on close()
+	// Kick off goroutines to list for TCP and/or UDP traffic as specified.
+	switch config.G.Carbon.Protocol {
+	case "tcp":
+		config.G.OnReload1WG.Add(1)
+		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
+	case "udp":
+		config.G.OnReload1WG.Add(1)
+		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
+	default:
+		config.G.OnReload1WG.Add(2)
+		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
+		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
 	}
-	cpl.myHostPort = <-asResolved // Doesn't matter which one wins, they're the same
-	close(asResolved)
 }
 
 // carbonTCP listens for incoming Carbon TCP traffic and dispatches it.
-func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string, asResolved chan string) {
+func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string) {
 
 	// Resolve the address:port, and start listening for TCP connections.
 	tcpaddr, _ := net.ResolveTCPAddr("tcp4", net.JoinHostPort(addr, port))
@@ -117,7 +106,6 @@ func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string, asResolv
 		os.Exit(3)
 	}
 	defer tcpListener.Close()
-	asResolved <- tcpListener.Addr().String()
 	config.G.Log.System.LogInfo("Listening on %s TCP for Carbon plaintext protocol", tcpListener.Addr().String())
 
 	// Start listener and pass incoming connections to handler.
@@ -156,7 +144,7 @@ func (cpl *CarbonPlaintextListener) getTCPData(conn net.Conn) {
 }
 
 // carbonUDP listens for incoming Carbon UDP traffic and dispatches it.
-func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string, asResolved chan string) {
+func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
 
 	// Resolve the address:port, and start listening for UDP connections.
 	udpaddr, _ := net.ResolveUDPAddr("udp4", net.JoinHostPort(addr, port))
@@ -167,7 +155,6 @@ func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string, asResolv
 		os.Exit(3)
 	}
 	defer udpConn.Close()
-	asResolved <- udpConn.LocalAddr().String()
 	config.G.Log.System.LogInfo("Listening on %s UDP for Carbon plaintext protocol", udpConn.LocalAddr().String())
 
 	/* Read UDP packets and pass data to handler.
@@ -270,6 +257,14 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 	}
 
 	// Assemble into canonical struct and send to queue manager.
-	config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
+	hash := int(pearson.Hash8(statPath)) // for debugging
+	index := int(pearson.Hash8(statPath)) % len(config.G.Carbon.Peers)
+	if cpl.myHostPort == config.G.Carbon.Peers[index] {
+		config.G.Log.System.LogInfo("Mine! %-30s %3d %d %s", statPath, hash, index, config.G.Carbon.Peers[index])
+		config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
+	} else {
+		config.G.Log.System.LogInfo("      %-30s %3d %d %s", statPath, hash, index, config.G.Carbon.Peers[index])
+		// TODO: Send to appropriate peer.
+	}
 	logging.Statsd.Client.Inc(config.G.Statsd.Events.ReceiveOK.Key, 1, config.G.Statsd.Events.ReceiveOK.SampleRate)
 }
