@@ -15,28 +15,36 @@ import (
 )
 
 type CarbonPlaintextListener struct {
+	myHostPort string // host:port as actually resolved, for matching self
 }
 
 func (cpl *CarbonPlaintextListener) Init() {
 }
 
 func (cpl *CarbonPlaintextListener) Start() {
+	var asResolved chan string
 	switch config.G.Carbon.Protocol {
 	case "tcp":
-		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
+		asResolved = make(chan string, 1)
 		config.G.OnReload1WG.Add(1)
+		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port, asResolved)
 	case "udp":
-		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
+		asResolved = make(chan string, 1)
 		config.G.OnReload1WG.Add(1)
+		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port, asResolved)
 	default:
-		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
-		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
+		asResolved = make(chan string, 2)
 		config.G.OnReload1WG.Add(2)
+		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port, asResolved)
+		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port, asResolved)
+		_ = <-asResolved // Read this to empty the channel and prevent race on close()
 	}
+	cpl.myHostPort = <-asResolved // Doesn't matter which one wins, they're the same
+	close(asResolved)
 }
 
 // carbonTCP listens for incoming Carbon TCP traffic and dispatches it.
-func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string) {
+func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string, asResolved chan string) {
 
 	// Resolve the address:port, and start listening for TCP connections.
 	tcpaddr, _ := net.ResolveTCPAddr("tcp4", net.JoinHostPort(addr, port))
@@ -47,6 +55,7 @@ func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string) {
 		os.Exit(3)
 	}
 	defer tcpListener.Close()
+	asResolved <- tcpListener.Addr().String()
 	config.G.Log.System.LogInfo("Listening on %s TCP for Carbon plaintext protocol", tcpListener.Addr().String())
 
 	// Start listener and pass incoming connections to handler.
@@ -85,7 +94,7 @@ func (cpl *CarbonPlaintextListener) getTCPData(conn net.Conn) {
 }
 
 // carbonUDP listens for incoming Carbon UDP traffic and dispatches it.
-func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
+func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string, asResolved chan string) {
 
 	// Resolve the address:port, and start listening for UDP connections.
 	udpaddr, _ := net.ResolveUDPAddr("udp4", net.JoinHostPort(addr, port))
@@ -96,6 +105,7 @@ func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
 		os.Exit(3)
 	}
 	defer udpConn.Close()
+	asResolved <- udpConn.LocalAddr().String()
 	config.G.Log.System.LogInfo("Listening on %s UDP for Carbon plaintext protocol", udpConn.LocalAddr().String())
 
 	/* Read UDP packets and pass data to handler.
