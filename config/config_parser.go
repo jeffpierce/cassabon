@@ -2,6 +2,7 @@ package config
 
 import (
 	"io/ioutil"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -165,6 +166,18 @@ func ParseRefreshableValues() {
 	G.Carbon.Peers = rawCassabonConfig.Carbon.Peers
 	// Ensure a canonical order for peers, as we will allocate metrics paths by index.
 	sort.Strings(G.Carbon.Peers)
+	// Ensure that the local address:port is in the peer list.
+	localHostPort := G.Carbon.Address + ":" + G.Carbon.Port
+	for _, v := range G.Carbon.Peers {
+		if v == localHostPort {
+			localHostPort = ""
+			break
+		}
+	}
+	if localHostPort != "" {
+		G.Log.System.LogFatal("Local host:port %s is not in peer list: %v", localHostPort, G.Carbon.Peers)
+		os.Exit(2)
+	}
 
 	// Copy in the addresses of the services we use.
 	G.Cassandra = rawCassabonConfig.Cassandra
