@@ -31,9 +31,10 @@ type CassabonConfig struct {
 		Queue RedisSettings // Settings for Redis Queue
 	}
 	Carbon struct {
-		Address  string // Address for Carbon Receiver to listen on
-		Port     string // Port for Carbon Receiver to listen on
-		Protocol string // "tcp", "udp" or "both" are acceptable
+		Address  string   // Address for Carbon Receiver to listen on
+		Port     string   // Port for Carbon Receiver to listen on
+		Protocol string   // "tcp", "udp" or "both" are acceptable
+		Peers    []string // All servers in the Cassabon array, as "ip:port"
 	}
 	Statsd   StatsdSettings
 	Rollups  map[string]RollupSettings // Map of regex and rollups
@@ -161,6 +162,9 @@ func ParseRefreshableValues() {
 	G.Carbon.Address = rawCassabonConfig.Carbon.Address
 	G.Carbon.Port = rawCassabonConfig.Carbon.Port
 	G.Carbon.Protocol = rawCassabonConfig.Carbon.Protocol
+	G.Carbon.Peers = rawCassabonConfig.Carbon.Peers
+	// Ensure a canonical order for peers, as we will allocate metrics paths by index.
+	sort.Strings(G.Carbon.Peers)
 
 	// Copy in the addresses of the services we use.
 	G.Cassandra = rawCassabonConfig.Cassandra

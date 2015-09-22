@@ -98,9 +98,10 @@ type Globals struct {
 		HealthCheckFile string // Health check file.
 	}
 	Carbon struct {
-		Address  string // Address for Carbon Receiver to listen on
-		Port     string // Port for Carbon Receiver to listen on
-		Protocol string // "tcp", "udp" or "both" are acceptable
+		Address  string   // Address for Carbon Receiver to listen on
+		Port     string   // Port for Carbon Receiver to listen on
+		Protocol string   // "tcp", "udp" or "both" are acceptable
+		Peers    []string // All servers in the Cassabon array, as "ip:port"
 	}
 
 	// Configuration of data point aggregations.
