@@ -247,7 +247,7 @@ func (sm *StoreManager) flush(terminating bool) {
 							expr,
 							sm.rollup[expr].Windows[i].Window,
 							sm.rollup[expr].Windows[i].Retention,
-							windowEnd.Format("15:04:05.000"),
+							windowEnd.Format("15:04:05.000"), // Window end time
 							path,
 							rollup.value[i])
 					}
@@ -260,6 +260,34 @@ func (sm *StoreManager) flush(terminating bool) {
 				// Set a new window closing time for the just-cleared window.
 				rl.nextWriteTime[i] = nextTimeBoundary(baseTime, sm.rollup[expr].Windows[i].Window)
 			}
+
+			// If terminating, write out all remaining data, stamped with current time.
+			if terminating {
+
+				// Iterate over all the paths that match the current expression.
+				for path, rollup := range rl.path {
+
+					// Has any data accumulated while the window was open?
+					if rollup.count[i] > 0 {
+						// TODO: Write the data to persistent storage.
+						config.G.Log.System.LogInfo("Write expr=%s win=%v ret=%v ts=%v path=%s value=%.4f",
+							expr,
+							sm.rollup[expr].Windows[i].Window,
+							sm.rollup[expr].Windows[i].Retention,
+							baseTime.Format("15:04:05.000"), // Current time, window end is in future
+							path,
+							rollup.value[i])
+					}
+
+					// Ensure the bucket is empty for the next open window.
+					rollup.count[i] = 0
+					rollup.value[i] = 0
+				}
+
+				// Set a new window closing time for the just-cleared window.
+				rl.nextWriteTime[i] = nextTimeBoundary(baseTime, sm.rollup[expr].Windows[i].Window)
+			}
+
 			// ASSERT: rl.nextWriteTime[i] time is in the future (later than baseTime).
 
 			// Adjust the timer delay downwards if this window closing time is
