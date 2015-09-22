@@ -250,6 +250,8 @@ func (sm *StoreManager) flush(terminating bool) {
 							windowEnd.Format("15:04:05.000"), // Window end time
 							path,
 							rollup.value[i])
+
+						sm.write(path, baseTime, rollup.value[i])
 					}
 
 					// Ensure the bucket is empty for the next open window.
@@ -277,6 +279,8 @@ func (sm *StoreManager) flush(terminating bool) {
 							baseTime.Format("15:04:05.000"), // Current time, window end is in future
 							path,
 							rollup.value[i])
+
+						sm.write(path, baseTime, rollup.value[i])
 					}
 
 					// Ensure the bucket is empty for the next open window.
@@ -315,4 +319,8 @@ func (sm *StoreManager) flush(terminating bool) {
 			// Do not block if channel is at capacity
 		}
 	}
+}
+
+// flush persists the accumulated metrics to the database.
+func (sm *StoreManager) write(path string, ts time.Time, value float64) {
 }
