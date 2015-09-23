@@ -91,7 +91,7 @@ func (indexer *MetricsIndexer) processMetricPath(splitPath []string, pathLen int
 
 		// Construct the metric string
 		metricPath := strings.Join([]string{
-			middleware.ToBigEndianString(pathLen),
+			ToBigEndianString(pathLen),
 			strings.Join(splitPath, "."),
 			strconv.FormatBool(isLeaf)}, ":")
 		config.G.Log.System.LogDebug("Indexer indexing \"%s\"", metricPath)

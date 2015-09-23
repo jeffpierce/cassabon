@@ -43,17 +43,6 @@ type StoreManager struct {
 	byExpr map[string]*runlist // Stats, by path within expression, for rollup processing
 }
 
-// nextTimeBoundary returns the time when the currently open time window closes.
-func nextTimeBoundary(baseTime time.Time, windowSize time.Duration) time.Time {
-	// This will round down before the halfway point.
-	b := baseTime.Round(windowSize)
-	if b.Before(baseTime) {
-		// It was rounded down, adjust up to next boundary.
-		b = b.Add(windowSize)
-	}
-	return b
-}
-
 func (sm *StoreManager) Init() {
 
 	// Copy in the configuration (requires hard restart to refresh).
