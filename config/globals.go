@@ -56,12 +56,14 @@ type Globals struct {
 	// Goroutine management.
 	// Note: Anything that accepts input should shut down first, so it should
 	// monitor OnReload1. Everything else should monitor OnReload2.
-	OnReload1   chan struct{}
-	OnReload2   chan struct{}
-	OnExit      chan struct{}
-	OnReload1WG sync.WaitGroup
-	OnReload2WG sync.WaitGroup
-	OnExitWG    sync.WaitGroup
+	OnPeerChangeReq chan struct{}
+	OnPeerChangeRsp chan struct{}
+	OnReload1       chan struct{}
+	OnReload2       chan struct{}
+	OnExit          chan struct{}
+	OnReload1WG     sync.WaitGroup
+	OnReload2WG     sync.WaitGroup
+	OnExitWG        sync.WaitGroup
 
 	// Channels for sending metrics between modules.
 	Channels struct {
@@ -98,9 +100,10 @@ type Globals struct {
 		HealthCheckFile string // Health check file.
 	}
 	Carbon struct {
-		Address  string // Address for Carbon Receiver to listen on
-		Port     string // Port for Carbon Receiver to listen on
-		Protocol string // "tcp", "udp" or "both" are acceptable
+		Address  string   // Address for Carbon Receiver to listen on
+		Port     string   // Port for Carbon Receiver to listen on
+		Protocol string   // "tcp", "udp" or "both" are acceptable
+		Peers    []string // All servers in the Cassabon array, as "ip:port"
 	}
 
 	// Configuration of data point aggregations.

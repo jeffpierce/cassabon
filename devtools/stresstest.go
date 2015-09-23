@@ -14,10 +14,13 @@ import (
 func main() {
 
 	// Get options provided on the command line.
-	var protocol string
+	var protocol, host string
 	var rate uint64
+	var port int
 	flag.StringVar(&protocol, "protocol", "tcp", "[tcp|udp]")
 	flag.Uint64Var(&rate, "rate", 30, "number of stats entries per second to generate")
+	flag.StringVar(&host, "host", "127.0.0.1", "stats destination host")
+	flag.IntVar(&port, "port", 2003, "stats destination port")
 	flag.Parse()
 
 	// Validate the protocol and the rate.
@@ -60,13 +63,13 @@ func main() {
 	pc.Init()
 	if protocol == "tcp" {
 		// Open a TCP connection to Cassabon.
-		if err := pc.OpenTCP("127.0.0.1", 2003); err != nil {
+		if err := pc.OpenTCP(host, port); err != nil {
 			fmt.Printf("%v\nDid you start Cassabon?\n", err)
 			os.Exit(1)
 		}
 	} else {
 		// Open a UDP connection to Cassabon (doesn't fail if Cassabon is not running).
-		if err := pc.OpenUDP("127.0.0.1", 2003); err != nil {
+		if err := pc.OpenUDP(host, port); err != nil {
 			fmt.Printf("%v\n", err) // Must be some other error
 			os.Exit(1)
 		}

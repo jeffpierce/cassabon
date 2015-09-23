@@ -64,6 +64,20 @@ func (sm *StoreManager) Init() {
 	sm.setTimeout = make(chan time.Duration, 0)
 	sm.timeout = make(chan struct{}, 1)
 
+	// Start the persistent goroutines.
+	config.G.OnExitWG.Add(2)
+	go sm.timer()
+	go sm.run()
+
+	// Kick off the timer.
+	sm.setTimeout <- time.Second
+}
+
+func (sm *StoreManager) Start() {
+}
+
+func (sm *StoreManager) resetRollupData() {
+
 	// Initialize rollup data structures.
 	sm.byPath = make(map[string]*rollup)
 	sm.byExpr = make(map[string]*runlist)
@@ -79,20 +93,12 @@ func (sm *StoreManager) Init() {
 		}
 		sm.byExpr[expr] = rl
 	}
-
-	// Start the persistent goroutines.
-	config.G.OnExitWG.Add(2)
-	go sm.timer()
-	go sm.run()
-
-	// Kick off the timer.
-	sm.setTimeout <- time.Second
-}
-
-func (sm *StoreManager) Start() {
 }
 
 func (sm *StoreManager) run() {
+
+	// Perform first-time initialization of rollup data accumulation structures.
+	sm.resetRollupData()
 
 	// Open connection to the Cassandra database here, so we can defer the close.
 	var err error
@@ -114,6 +120,11 @@ func (sm *StoreManager) run() {
 
 	for {
 		select {
+		case <-config.G.OnPeerChangeReq:
+			config.G.Log.System.LogDebug("StoreManager::run received PEERCHANGE message")
+			sm.flush(true)
+			sm.resetRollupData()
+			config.G.OnPeerChangeRsp <- struct{}{} // Unblock sender
 		case <-config.G.OnExit:
 			config.G.Log.System.LogDebug("StoreManager::run received QUIT message")
 			sm.flush(true)

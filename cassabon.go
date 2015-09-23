@@ -77,6 +77,8 @@ func main() {
 	var sigterm = make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
 
+	config.G.OnPeerChangeReq = make(chan struct{}, 1)
+	config.G.OnPeerChangeRsp = make(chan struct{}, 1)
 	config.G.OnExit = make(chan struct{}, 1)
 
 	config.G.Channels.DataStore = make(chan config.CarbonMetric, config.G.Channels.DataStoreChanLen)
