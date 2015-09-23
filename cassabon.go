@@ -21,14 +21,13 @@ func main() {
 
 	// Get options provided on the command line.
 	flag.StringVar(&confFile, "conf", "config/cassabon.yaml", "Location of YAML configuration file.")
-	flag.StringVar(&config.G.Log.Logdir, "logdir", "", "Name of directory to contain log files (stderr if unspecified)")
 	flag.Parse()
 
-	// Fill in startup values not provided on the command line, if available.
-	if confFile != "" {
-		config.ReadConfigurationFile(confFile, false)
-		config.ParseStartupValues()
-	}
+	// Read the configuration file from disk.
+	// This will PANIC ON ERRORS, because the logger is not yet available.
+	config.ReadConfigurationFile(confFile, false)
+	// Populate the global config with values used only once.
+	config.LoadStartupValues()
 
 	// Set up logging.
 	sev, errLogLevel := logging.TextToSeverity(config.G.Log.Loglevel)
@@ -52,11 +51,16 @@ func main() {
 		config.G.Log.System.LogWarn("Bad command line argument: %v", errLogLevel)
 	}
 
-	// Now that we have a logger, parse the rest of the configuration.
-	if confFile != "" {
-		config.G.Log.System.LogInfo("Reading configuration file %s", confFile)
-		config.ParseRefreshableValues()
-	}
+	// Now that we have a logger to report warnings, populate the remainder of the global config.
+	config.G.Log.System.LogInfo("Reading configuration file %s", confFile)
+	config.LoadRefreshableValues()
+	config.LoadRollups()
+
+	// Set up reload and termination signal handlers.
+	var sighup = make(chan os.Signal, 1)
+	signal.Notify(sighup, syscall.SIGHUP)
+	var sigterm = make(chan os.Signal, 1)
+	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
 
 	// Set up stats reporting.
 	if config.G.Statsd.Host != "" {
@@ -71,16 +75,10 @@ func main() {
 	}
 	defer logging.Statsd.Close()
 
-	// Set up reload and termination signal handlers.
-	var sighup = make(chan os.Signal, 1)
-	signal.Notify(sighup, syscall.SIGHUP)
-	var sigterm = make(chan os.Signal, 1)
-	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
-
+	// Create all the inter-process communication channels.
 	config.G.OnPeerChangeReq = make(chan struct{}, 1)
 	config.G.OnPeerChangeRsp = make(chan struct{}, 1)
 	config.G.OnExit = make(chan struct{}, 1)
-
 	config.G.Channels.DataStore = make(chan config.CarbonMetric, config.G.Channels.DataStoreChanLen)
 	config.G.Channels.IndexStore = make(chan config.CarbonMetric, config.G.Channels.IndexStoreChanLen)
 	config.G.Channels.Gopher = make(chan config.IndexQuery, config.G.Channels.GopherChanLen)
@@ -105,10 +103,12 @@ func main() {
 		config.G.OnReload2 = make(chan struct{}, 1)
 
 		// Re-read the configuration to get any updated values.
-		if configIsStale && confFile != "" {
+		if configIsStale {
 			config.G.Log.System.LogInfo("Reading configuration file %s", confFile)
-			if err := config.ReadConfigurationFile(confFile, true); err == nil {
-				config.ParseRefreshableValues()
+			if err := config.ReadConfigurationFile(confFile, true); err != nil {
+				config.G.Log.System.LogError("Unable to load configuration: %v", err)
+			} else {
+				config.LoadRefreshableValues()
 				sev, _ := logging.TextToSeverity(config.G.Log.Loglevel)
 				config.G.Log.System.SetLogLevel(sev)
 			}
@@ -127,6 +127,7 @@ func main() {
 		// Wait for receipt of a recognized signal.
 		config.G.Log.System.LogInfo("Initialization complete")
 		select {
+
 		case <-sighup:
 			config.G.Log.System.LogInfo("Received SIGHUP")
 			configIsStale = true
@@ -136,6 +137,7 @@ func main() {
 			close(config.G.OnReload2)   // Notify all reloadable goroutines to exit
 			config.G.OnReload2WG.Wait() // Wait for them to exit
 			logging.Reopen()
+
 		case <-sigterm:
 			config.G.Log.System.LogInfo("Received SIGINT/SIGTERM, preparing to terminate")
 			api.Stop()                  // Notify API to stop
@@ -146,6 +148,7 @@ func main() {
 			close(config.G.OnExit)      // Notify all persistent goroutines to exit
 			config.G.OnExitWG.Wait()    // Wait for them to exit
 			repeat = false
+
 		}
 	}
 

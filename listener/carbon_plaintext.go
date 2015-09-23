@@ -117,7 +117,7 @@ func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string) {
 			return
 		default:
 			// On receipt of a connection, spawn a goroutine to handle it.
-			tcpListener.SetDeadline(time.Now().Add(time.Duration(config.G.Parameters.Listener.TCPTimeout) * time.Second))
+			tcpListener.SetDeadline(time.Now().Add(time.Duration(config.G.Carbon.Parameters.TCPTimeout) * time.Second))
 			if conn, err := tcpListener.Accept(); err == nil {
 				go cpl.getTCPData(conn)
 			} else {
@@ -177,7 +177,7 @@ func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
 			config.G.OnReload1WG.Done()
 			return
 		default:
-			udpConn.SetDeadline(time.Now().Add(time.Duration(config.G.Parameters.Listener.UDPTimeout) * time.Second))
+			udpConn.SetDeadline(time.Now().Add(time.Duration(config.G.Carbon.Parameters.UDPTimeout) * time.Second))
 			bytesRead, _, err := udpConn.ReadFromUDP(buf)
 			if err == nil {
 
