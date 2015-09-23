@@ -257,14 +257,15 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 	}
 
 	// Assemble into canonical struct and send to queue manager.
-	hash := int(pearson.Hash8(statPath)) // for debugging
-	index := int(pearson.Hash8(statPath)) % len(config.G.Carbon.Peers)
-	if cpl.myHostPort == config.G.Carbon.Peers[index] {
-		config.G.Log.System.LogInfo("Mine! %-30s %3d %d %s", statPath, hash, index, config.G.Carbon.Peers[index])
+	//hash := int(pearson.Hash8(statPath)) // for debugging
+	peerIndex := int(pearson.Hash8(statPath)) % len(config.G.Carbon.Peers)
+	if cpl.myHostPort == config.G.Carbon.Peers[peerIndex] {
+		//config.G.Log.System.LogInfo("Mine! %-30s %3d %d %s", statPath, hash, peerIndex, config.G.Carbon.Peers[peerIndex])
 		config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
 	} else {
-		config.G.Log.System.LogInfo("      %-30s %3d %d %s", statPath, hash, index, config.G.Carbon.Peers[index])
+		//config.G.Log.System.LogInfo("      %-30s %3d %d %s", statPath, hash, peerIndex, config.G.Carbon.Peers[peerIndex])
 		// TODO: Send to appropriate peer.
+		config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
 	}
 	logging.Statsd.Client.Inc(config.G.Statsd.Events.ReceiveOK.Key, 1, config.G.Statsd.Events.ReceiveOK.SampleRate)
 }
