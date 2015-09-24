@@ -89,8 +89,7 @@ type Globals struct {
 
 	// Configuration of the Carbon protocol listener.
 	Carbon struct {
-		Address    string // Address for Carbon Receiver to listen on
-		Port       string // Port for Carbon Receiver to listen on
+		Listen     string // ip:port on which to listen for Carbon stats
 		Protocol   string // "tcp", "udp" or "both" are acceptable
 		Parameters struct {
 			TCPTimeout int

@@ -25,8 +25,7 @@ type CassabonConfig struct {
 		GopherChanLen     int // Length of the StatGopher channel
 	}
 	Carbon struct {
-		Address    string // Address for Carbon Receiver to listen on
-		Port       string // Port for Carbon Receiver to listen on
+		Listen     string // ip:port on which to listen for Carbon stats
 		Protocol   string // "tcp", "udp" or "both" are acceptable
 		Parameters struct {
 			TCPTimeout int
@@ -152,13 +151,12 @@ func LoadRefreshableValues() {
 
 	// Copy in the Carbon listener configuration.
 	// NOTE: If any of these change, all rollup accumulators must be flushed.
-	G.Carbon.Address = rawCassabonConfig.Carbon.Address
-	G.Carbon.Port = rawCassabonConfig.Carbon.Port
+	G.Carbon.Listen = rawCassabonConfig.Carbon.Listen
 	G.Carbon.Protocol = rawCassabonConfig.Carbon.Protocol
 	G.Carbon.Peers = rawCassabonConfig.Carbon.Peers
 
 	// Ensure that the local address:port is in the peer list.
-	localHostPort := G.Carbon.Address + ":" + G.Carbon.Port
+	localHostPort := G.Carbon.Listen
 	for _, v := range G.Carbon.Peers {
 		if v == localHostPort {
 			localHostPort = ""

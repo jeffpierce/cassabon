@@ -24,9 +24,8 @@ channels:
 #
 carbon:
     # If address, port, or peers changes, all rollups will be flushed
-    address: "127.0.0.1"
-    port: 2003
-    protocol: "tcp"
+    listen: "127.0.0.1:2003"
+    protocol: "both"
     parameters:
         tcptimeout: 5
         udptimeout: 5
