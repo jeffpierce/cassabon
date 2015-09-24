@@ -13,11 +13,13 @@ import (
 )
 
 type CassabonAPI struct {
-	server *web.Mux
+	server   *web.Mux
+	hostPort string
 }
 
 func (api *CassabonAPI) Start() {
 	// Add to waitgroup and run go routine.
+	api.hostPort = config.G.API.Listen
 	config.G.OnReload1WG.Add(1)
 	go api.run()
 }
@@ -43,7 +45,7 @@ func (api *CassabonAPI) run() {
 	api.server.Use(requestLogger)
 
 	config.G.Log.System.LogInfo("API initialized, serving!")
-	graceful.ListenAndServe(config.G.API.Listen, api.server)
+	graceful.ListenAndServe(api.hostPort, api.server)
 }
 
 func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
