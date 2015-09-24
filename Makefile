@@ -8,6 +8,7 @@ DESTDIR = $(BUILDDIR)/$(RELEASE)
 TARBALL = $(BUILDDIR)/$(TARGET)-$(RELEASE).tar.gz
 
 SOURCES = $(TARGET).go api/*go config/*go datastore/*go engine/*go listener/*go logging/*go middleware/*go
+TESTS = . ./api ./config ./datastore ./engine ./listener ./logging ./middleware ./pearson
 
 UNAME = $(shell uname)
 
@@ -20,7 +21,7 @@ fetch:
 	go get -t -d -v ./...
 
 test:
-	go test -race -v ./...
+	go test -race $(TESTS)
 
 build: $(DESTDIR)/$(TARGET)
 
