@@ -100,8 +100,7 @@ type Globals struct {
 
 	// Configuration of the API.
 	API struct {
-		Address         string // HTTP API listens on this address
-		Port            string // HTTP API listens on this port
+		Listen          string // HTTP API listens on this address:port
 		HealthCheckFile string // Health check file.
 	}
 

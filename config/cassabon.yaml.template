@@ -34,8 +34,7 @@ carbon:
         - "127.0.0.1:2013"
         - "127.0.0.1:2023"
 api:
-    address: "127.0.0.1"
-    port: 8080
+    listen: "127.0.0.1:8080"
     healthcheckfile: "config/healthcheckfile"
 cassandra:
     hosts:

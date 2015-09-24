@@ -34,8 +34,7 @@ type CassabonConfig struct {
 		Peers []string // All servers in the Cassabon array, as "ip:port"
 	}
 	API struct {
-		Address         string // HTTP API listens on this address
-		Port            string // HTTP API listens on this port
+		Listen          string // HTTP API listens on this address:port
 		HealthCheckFile string // Location of healthcheck file.
 	}
 	Cassandra struct {
@@ -191,8 +190,7 @@ func LoadRefreshableValues() {
 	}
 
 	// Copy in the API configuration values.
-	G.API.Address = rawCassabonConfig.API.Address
-	G.API.Port = rawCassabonConfig.API.Port
+	G.API.Listen = rawCassabonConfig.API.Listen
 	G.API.HealthCheckFile = rawCassabonConfig.API.HealthCheckFile
 
 	// Copy in the Cassandra database connection values.
