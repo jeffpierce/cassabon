@@ -118,7 +118,7 @@ func (gopher *StatPathGopher) getMax(s string) string {
 func (gopher *StatPathGopher) simpleWild(q string, l int) []byte {
 	// Queries with an ending wild card only are easy, as the response from
 	// ZRANGEBYLEX cassabon [bigE_len:path [bigE_len:path\xff is the answer.
-	queryString := strings.Join([]string{"[", middleware.ToBigEndianString(l), ":", q}, "")
+	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", q}, "")
 	queryStringMax := gopher.getMax(queryString)
 
 	// Perform the query.
@@ -138,7 +138,7 @@ func (gopher *StatPathGopher) simpleWild(q string, l int) []byte {
 
 func (gopher *StatPathGopher) noWild(q string, l int) []byte {
 	// No wild card means we should be retrieving one stat, or none at all.
-	queryString := strings.Join([]string{"[", middleware.ToBigEndianString(l), ":", q, ":"}, "")
+	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", q, ":"}, "")
 	queryStringMax := gopher.getMax(queryString)
 
 	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeByScore{
@@ -159,7 +159,7 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) []byte {
 	// the first part of the non-wildcard, then filter that set with a regex match.
 	var matches []string
 
-	queryString := strings.Join([]string{"[", middleware.ToBigEndianString(l), ":", splitWild[0]}, "")
+	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", splitWild[0]}, "")
 	queryStringMax := gopher.getMax(queryString)
 
 	config.G.Log.System.LogDebug(

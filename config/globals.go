@@ -32,7 +32,7 @@ const (
 )
 
 // The string that represents the catchall rollup.
-const CATCHALL_EXPRESSION = "default"
+const ROLLUP_CATCHALL = "default"
 
 // RollupWindow is the definition of one rollup interval.
 type RollupWindow struct {
@@ -75,7 +75,7 @@ type Globals struct {
 		GopherChanLen     int
 	}
 
-	// Integration into local filesystem and remote services.
+	// Logger configuration and runtime properties.
 	Log struct {
 		Logdir   string // Log Directory
 		Loglevel string // Level to log at.
@@ -83,38 +83,38 @@ type Globals struct {
 		Carbon   *logging.FileLogger
 		API      *logging.FileLogger
 	}
-	Statsd    StatsdSettings
+
+	// Statsd configuration.
+	Statsd StatsdSettings
+
+	// Configuration of the Carbon protocol listener.
+	Carbon struct {
+		Listen     string // ip:port on which to listen for Carbon stats
+		Protocol   string // "tcp", "udp" or "both" are acceptable
+		Parameters struct {
+			TCPTimeout int
+			UDPTimeout int
+		}
+		Peers []string // All servers in the Cassabon array, as "ip:port"
+	}
+
+	// Configuration of the API.
+	API struct {
+		Listen          string // HTTP API listens on this address:port
+		HealthCheckFile string // Health check file.
+	}
+
 	Cassandra struct {
 		Hosts []string // List of hostnames or IP addresses of Cassandra ring
 		Port  string   // Cassandra port
 	}
+
 	Redis struct {
 		Index RedisSettings // Settings for Redis Index
 		Queue RedisSettings // Settings for Redis Queue
 	}
 
-	// Configuration of the services offered to clients.
-	API struct {
-		Address         string // HTTP API listens on this address
-		Port            string // HTTP API listens on this port
-		HealthCheckFile string // Health check file.
-	}
-	Carbon struct {
-		Address  string   // Address for Carbon Receiver to listen on
-		Port     string   // Port for Carbon Receiver to listen on
-		Protocol string   // "tcp", "udp" or "both" are acceptable
-		Peers    []string // All servers in the Cassabon array, as "ip:port"
-	}
-
-	// Configuration of data point aggregations.
+	// Configuration of data rollups.
 	RollupPriority []string             // First matched expression wins
 	Rollup         map[string]RollupDef // Rollup processing definitions by path expression
-
-	// Configuration of internal elements.
-	Parameters struct {
-		Listener struct {
-			TCPTimeout int
-			UDPTimeout int
-		}
-	}
 }

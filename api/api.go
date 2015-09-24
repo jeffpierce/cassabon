@@ -4,7 +4,6 @@ package api
 import (
 	"fmt"
 	"io/ioutil"
-	"net"
 	"net/http"
 
 	"github.com/zenazn/goji/graceful"
@@ -14,9 +13,7 @@ import (
 )
 
 type CassabonAPI struct {
-	server  *web.Mux
-	address string
-	port    string
+	server *web.Mux
 }
 
 func (api *CassabonAPI) Start() {
@@ -34,8 +31,6 @@ func (api *CassabonAPI) Stop() {
 func (api *CassabonAPI) run() {
 	// Initialize API server
 	api.server = web.New()
-	api.address = config.G.API.Address
-	api.port = config.G.API.Port
 
 	// Define routes
 	api.server.Get("/paths", api.pathsHandler)
@@ -48,7 +43,7 @@ func (api *CassabonAPI) run() {
 	api.server.Use(requestLogger)
 
 	config.G.Log.System.LogInfo("API initialized, serving!")
-	graceful.ListenAndServe(net.JoinHostPort(api.address, api.port), api.server)
+	graceful.ListenAndServe(config.G.API.Listen, api.server)
 }
 
 func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {

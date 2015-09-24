@@ -17,20 +17,18 @@ import (
 
 // peerState is an object used to detect changes in local host:port or in peer list.
 type peerState struct {
-	lastHost  string   // For detection of whether our local host has changed
-	lastPort  string   // For detection of whether our local port has changed
-	lastPeers []string // For detection of whether the peer list has changed
+	lastHostPort string   // For detection of whether our local host:port has changed
+	lastPeers    []string // For detection of whether the peer list has changed
 }
 
 // isInitialized indicates whether the structure has been initialized.
 func (ps *peerState) isInitialized() bool {
-	return ps.lastHost != ""
+	return ps.lastHostPort != ""
 }
 
 // setData initializes the structure with the given data.
-func (ps *peerState) setData(host, port string, peers []string) {
-	ps.lastHost = host
-	ps.lastPort = port
+func (ps *peerState) setData(hostPort string, peers []string) {
+	ps.lastHostPort = hostPort
 	ps.lastPeers = make([]string, len(peers))
 	for i, v := range peers {
 		ps.lastPeers[i] = v
@@ -38,8 +36,8 @@ func (ps *peerState) setData(host, port string, peers []string) {
 }
 
 // isEqual indicates whether the current configuration is equal to the prior.
-func (ps *peerState) isEqual(host, port string, peers []string) bool {
-	if ps.lastHost != host || ps.lastPort != port {
+func (ps *peerState) isEqual(hostPort string, peers []string) bool {
+	if ps.lastHostPort != hostPort {
 		return false
 	}
 	if len(ps.lastPeers) != len(peers) {
@@ -54,7 +52,6 @@ func (ps *peerState) isEqual(host, port string, peers []string) bool {
 }
 
 type CarbonPlaintextListener struct {
-	myHostPort    string    // host:port as actually resolved, for matching self
 	lastPeerState peerState // State of peer list for comparison after a reload
 }
 
@@ -67,38 +64,37 @@ func (cpl *CarbonPlaintextListener) Start() {
 	// Determine whether we need to clear the rollup accumulators.
 	if !cpl.lastPeerState.isInitialized() {
 		// On first time here, initialize with current peer state.
-		cpl.lastPeerState.setData(config.G.Carbon.Address, config.G.Carbon.Port, config.G.Carbon.Peers)
+		cpl.lastPeerState.setData(config.G.Carbon.Listen, config.G.Carbon.Peers)
 	} else {
 		// Clear out our local accumulators if the peer list changed in any way.
-		if !cpl.lastPeerState.isEqual(config.G.Carbon.Address, config.G.Carbon.Port, config.G.Carbon.Peers) {
+		if !cpl.lastPeerState.isEqual(config.G.Carbon.Listen, config.G.Carbon.Peers) {
 			config.G.Log.System.LogDebug("peerState::isEqual(): false")
 			config.G.OnPeerChangeReq <- struct{}{}
 			<-config.G.OnPeerChangeRsp
-			cpl.lastPeerState.setData(config.G.Carbon.Address, config.G.Carbon.Port, config.G.Carbon.Peers)
+			cpl.lastPeerState.setData(config.G.Carbon.Listen, config.G.Carbon.Peers)
 		}
 	}
-	cpl.myHostPort = config.G.Carbon.Address + ":" + config.G.Carbon.Port
 
 	// Kick off goroutines to list for TCP and/or UDP traffic as specified.
 	switch config.G.Carbon.Protocol {
 	case "tcp":
 		config.G.OnReload1WG.Add(1)
-		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
+		go cpl.carbonTCP(config.G.Carbon.Listen)
 	case "udp":
 		config.G.OnReload1WG.Add(1)
-		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
+		go cpl.carbonUDP(config.G.Carbon.Listen)
 	default:
 		config.G.OnReload1WG.Add(2)
-		go cpl.carbonTCP(config.G.Carbon.Address, config.G.Carbon.Port)
-		go cpl.carbonUDP(config.G.Carbon.Address, config.G.Carbon.Port)
+		go cpl.carbonTCP(config.G.Carbon.Listen)
+		go cpl.carbonUDP(config.G.Carbon.Listen)
 	}
 }
 
 // carbonTCP listens for incoming Carbon TCP traffic and dispatches it.
-func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string) {
+func (cpl *CarbonPlaintextListener) carbonTCP(hostPort string) {
 
 	// Resolve the address:port, and start listening for TCP connections.
-	tcpaddr, _ := net.ResolveTCPAddr("tcp4", net.JoinHostPort(addr, port))
+	tcpaddr, _ := net.ResolveTCPAddr("tcp4", hostPort)
 	tcpListener, err := net.ListenTCP("tcp4", tcpaddr)
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
@@ -117,7 +113,7 @@ func (cpl *CarbonPlaintextListener) carbonTCP(addr string, port string) {
 			return
 		default:
 			// On receipt of a connection, spawn a goroutine to handle it.
-			tcpListener.SetDeadline(time.Now().Add(time.Duration(config.G.Parameters.Listener.TCPTimeout) * time.Second))
+			tcpListener.SetDeadline(time.Now().Add(time.Duration(config.G.Carbon.Parameters.TCPTimeout) * time.Second))
 			if conn, err := tcpListener.Accept(); err == nil {
 				go cpl.getTCPData(conn)
 			} else {
@@ -144,10 +140,10 @@ func (cpl *CarbonPlaintextListener) getTCPData(conn net.Conn) {
 }
 
 // carbonUDP listens for incoming Carbon UDP traffic and dispatches it.
-func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
+func (cpl *CarbonPlaintextListener) carbonUDP(hostPort string) {
 
 	// Resolve the address:port, and start listening for UDP connections.
-	udpaddr, _ := net.ResolveUDPAddr("udp4", net.JoinHostPort(addr, port))
+	udpaddr, _ := net.ResolveUDPAddr("udp4", hostPort)
 	udpConn, err := net.ListenUDP("udp", udpaddr)
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
@@ -177,7 +173,7 @@ func (cpl *CarbonPlaintextListener) carbonUDP(addr string, port string) {
 			config.G.OnReload1WG.Done()
 			return
 		default:
-			udpConn.SetDeadline(time.Now().Add(time.Duration(config.G.Parameters.Listener.UDPTimeout) * time.Second))
+			udpConn.SetDeadline(time.Now().Add(time.Duration(config.G.Carbon.Parameters.UDPTimeout) * time.Second))
 			bytesRead, _, err := udpConn.ReadFromUDP(buf)
 			if err == nil {
 
@@ -259,7 +255,7 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 	// Assemble into canonical struct and send to queue manager.
 	//hash := int(pearson.Hash8(statPath)) // for debugging
 	peerIndex := int(pearson.Hash8(statPath)) % len(config.G.Carbon.Peers)
-	if cpl.myHostPort == config.G.Carbon.Peers[peerIndex] {
+	if config.G.Carbon.Listen == config.G.Carbon.Peers[peerIndex] {
 		//config.G.Log.System.LogInfo("Mine! %-30s %3d %d %s", statPath, hash, peerIndex, config.G.Carbon.Peers[peerIndex])
 		config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
 	} else {

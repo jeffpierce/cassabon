@@ -18,38 +18,34 @@ type CassabonConfig struct {
 		Logdir   string // Log Directory
 		Loglevel string // Level to log at.
 	}
-	Cassandra struct {
-		Hosts []string // List of hostnames or IP addresses of Cassandra ring
-		Port  string   // Cassandra port
-	}
-	API struct {
-		Address         string // HTTP API listens on this address
-		Port            string // HTTP API listens on this port
-		HealthCheckFile string // Location of healthcheck file.
-	}
-	Redis struct {
-		Index RedisSettings // Settings for Redis Index
-		Queue RedisSettings // Settings for Redis Queue
-	}
-	Carbon struct {
-		Address  string   // Address for Carbon Receiver to listen on
-		Port     string   // Port for Carbon Receiver to listen on
-		Protocol string   // "tcp", "udp" or "both" are acceptable
-		Peers    []string // All servers in the Cassabon array, as "ip:port"
-	}
 	Statsd   StatsdSettings
-	Rollups  map[string]RollupSettings // Map of regex and rollups
 	Channels struct {
 		DataStoreChanLen  int // Length of the DataStore channel
 		IndexStoreChanLen int // Length of the Indexer channel
 		GopherChanLen     int // Length of the StatGopher channel
 	}
-	Parameters struct {
-		Listener struct {
+	Carbon struct {
+		Listen     string // ip:port on which to listen for Carbon stats
+		Protocol   string // "tcp", "udp" or "both" are acceptable
+		Parameters struct {
 			TCPTimeout int
 			UDPTimeout int
 		}
+		Peers []string // All servers in the Cassabon array, as "ip:port"
 	}
+	API struct {
+		Listen          string // HTTP API listens on this address:port
+		HealthCheckFile string // Location of healthcheck file.
+	}
+	Cassandra struct {
+		Hosts []string // List of hostnames or IP addresses of Cassandra ring
+		Port  string   // Cassandra port
+	}
+	Redis struct {
+		Index RedisSettings // Settings for Redis Index
+		Queue RedisSettings // Settings for Redis Queue
+	}
+	Rollups map[string]RollupSettings // Map of regex and rollups
 }
 
 // Definition of each rollup
@@ -85,26 +81,24 @@ type StatsdSettings struct {
 // rawCassabonConfig is the decoded YAML from the configuration file.
 var rawCassabonConfig *CassabonConfig
 
+// ReadConfigurationFile reads the contents of the specified file from disk, and unmarshals it.
+// First time through we have no logger, so we can't log warnings or errors. Panic instead.
 func ReadConfigurationFile(configFile string, haveLogger bool) error {
 
-	// Load config file.
-	// This happens before the logger is initialized because we also read in
-	// logger configuration, causing a cycle. So, we panic on errors.
+	// Read the configuration file.
 	yamlConfig, err := ioutil.ReadFile(configFile)
 	if err != nil {
 		if haveLogger {
-			G.Log.System.LogError("Configuration not available: %v", err)
 			return err
 		} else {
 			panic(err)
 		}
 	}
 
-	// Unmarshal config file into config struct.
+	// Unmarshal config file contents into raw config struct.
 	err = yaml.Unmarshal(yamlConfig, &rawCassabonConfig)
 	if err != nil {
 		if haveLogger {
-			G.Log.System.LogError("Configuration parse error: %v", err)
 			return err
 		} else {
 			panic(err)
@@ -113,14 +107,11 @@ func ReadConfigurationFile(configFile string, haveLogger bool) error {
 	return nil
 }
 
-func ParseStartupValues() {
+// LoadStartupValues populates the global config object with values that are used only once.
+func LoadStartupValues() {
 
-	// Fill in arguments not provided on the command line.
-	if G.Log.Logdir == "" {
-		G.Log.Logdir = rawCassabonConfig.Logging.Logdir
-	}
-
-	// We need the log level at startup to initialize the loggers.
+	// Copy in the logging configuration.
+	G.Log.Logdir = rawCassabonConfig.Logging.Logdir
 	G.Log.Loglevel = rawCassabonConfig.Logging.Loglevel
 
 	// Copy in the statsd configuration.
@@ -150,24 +141,21 @@ func ParseStartupValues() {
 	}
 }
 
-func ParseRefreshableValues() {
+// LoadRefreshableValues populates the global config objectwith values that
+// take effect again on receipt of a SIGHUP.
+func LoadRefreshableValues() {
 
-	// We can dynamically change the logging level.
+	// Copy in the logging level (can be changed while running).
 	G.Log.Loglevel = rawCassabonConfig.Logging.Loglevel
 
-	// Copy in the addresses of the services we offer.
-	G.API.Address = rawCassabonConfig.API.Address
-	G.API.Port = rawCassabonConfig.API.Port
-	G.API.HealthCheckFile = rawCassabonConfig.API.HealthCheckFile
-
-	G.Carbon.Address = rawCassabonConfig.Carbon.Address
-	G.Carbon.Port = rawCassabonConfig.Carbon.Port
+	// Copy in the Carbon listener configuration.
+	// NOTE: If any of these change, all rollup accumulators must be flushed.
+	G.Carbon.Listen = rawCassabonConfig.Carbon.Listen
 	G.Carbon.Protocol = rawCassabonConfig.Carbon.Protocol
 	G.Carbon.Peers = rawCassabonConfig.Carbon.Peers
-	// Ensure a canonical order for peers, as we will allocate metrics paths by index.
-	sort.Strings(G.Carbon.Peers)
+
 	// Ensure that the local address:port is in the peer list.
-	localHostPort := G.Carbon.Address + ":" + G.Carbon.Port
+	localHostPort := G.Carbon.Listen
 	for _, v := range G.Carbon.Peers {
 		if v == localHostPort {
 			localHostPort = ""
@@ -176,29 +164,46 @@ func ParseRefreshableValues() {
 	}
 	if localHostPort != "" {
 		G.Log.System.LogFatal("Local host:port %s is not in peer list: %v", localHostPort, G.Carbon.Peers)
-		os.Exit(2)
+		os.Exit(1)
 	}
 
-	// Copy in the addresses of the services we use.
+	// Ensure a canonical order for Cassabon peers, as we will allocate
+	// metrics paths to a peer by indexing into this array.
+	sort.Strings(G.Carbon.Peers)
+
+	// Copy in and sanitize the Carbon TCP listener timeout.
+	G.Carbon.Parameters.TCPTimeout = rawCassabonConfig.Carbon.Parameters.TCPTimeout
+	if G.Carbon.Parameters.TCPTimeout < 1 {
+		G.Carbon.Parameters.TCPTimeout = 1
+	}
+	if G.Carbon.Parameters.TCPTimeout > 30 {
+		G.Carbon.Parameters.TCPTimeout = 30
+	}
+
+	// Copy in and sanitize the Carbon UDP listener timeout.
+	G.Carbon.Parameters.UDPTimeout = rawCassabonConfig.Carbon.Parameters.UDPTimeout
+	if G.Carbon.Parameters.UDPTimeout < 1 {
+		G.Carbon.Parameters.UDPTimeout = 1
+	}
+	if G.Carbon.Parameters.UDPTimeout > 30 {
+		G.Carbon.Parameters.UDPTimeout = 30
+	}
+
+	// Copy in the API configuration values.
+	G.API.Listen = rawCassabonConfig.API.Listen
+	G.API.HealthCheckFile = rawCassabonConfig.API.HealthCheckFile
+
+	// Copy in the Cassandra database connection values.
 	G.Cassandra = rawCassabonConfig.Cassandra
+
+	// Copy in the Redis database connection values.
 	G.Redis.Index = rawCassabonConfig.Redis.Index
 	G.Redis.Queue = rawCassabonConfig.Redis.Queue
+}
 
-	// Copy in and sanitize the Listener internal parameters.
-	G.Parameters.Listener.TCPTimeout = rawCassabonConfig.Parameters.Listener.TCPTimeout
-	if G.Parameters.Listener.TCPTimeout < 1 {
-		G.Parameters.Listener.TCPTimeout = 1
-	}
-	if G.Parameters.Listener.TCPTimeout > 30 {
-		G.Parameters.Listener.TCPTimeout = 30
-	}
-	G.Parameters.Listener.UDPTimeout = rawCassabonConfig.Parameters.Listener.UDPTimeout
-	if G.Parameters.Listener.UDPTimeout < 1 {
-		G.Parameters.Listener.UDPTimeout = 1
-	}
-	if G.Parameters.Listener.UDPTimeout > 30 {
-		G.Parameters.Listener.UDPTimeout = 30
-	}
+// LoadRollups populates the global config object with the rollup definitions,
+// which should only happen when there are no accumulated stats.
+func LoadRollups() {
 
 	// Validate, copy in and normalize the rollup definitions.
 	G.RollupPriority = make([]string, 0, len(rawCassabonConfig.Rollups))
@@ -209,7 +214,7 @@ func ParseRefreshableValues() {
 	var err error
 	var intRetention int64
 	var rd *RollupDef
-	re := regexp.MustCompile("([0-9]+)([a-z])")
+	reDuration := regexp.MustCompile("([0-9]+)([a-z])")
 
 	// Inspect each rollup found in the configuration.
 	// Note: YAML decode has already folded duplicate path expressions.
@@ -234,7 +239,7 @@ func ParseRefreshableValues() {
 		rd = new(RollupDef)
 		rd.Method = method
 		rd.Windows = make([]RollupWindow, 0)
-		if expression != CATCHALL_EXPRESSION {
+		if expression != ROLLUP_CATCHALL {
 			if re, err := regexp.Compile(expression); err == nil {
 				rd.Expression = re
 			} else {
@@ -267,7 +272,7 @@ func ParseRefreshableValues() {
 
 			// Convert the retention to a time.Duration (max: 720 years).
 			// ParseDuration doesn't handle anything longer than hours, so do it manually.
-			matches := re.FindStringSubmatch(couplet[1]) // "1d" -> [ 1d 1 d ]
+			matches := reDuration.FindStringSubmatch(couplet[1]) // "1d" -> [ 1d 1 d ]
 			if len(matches) != 3 {
 				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
 				continue
@@ -327,49 +332,4 @@ func ParseRefreshableValues() {
 
 	// Sort the path expressions into priority order.
 	sort.Sort(ByPriority(G.RollupPriority))
-}
-
-// ByWindow is used to sort retention definitions by window duration.
-type ByWindow []RollupWindow
-
-// Implementation of sort.Interface.
-func (w ByWindow) Len() int {
-	return len(w)
-}
-func (w ByWindow) Swap(i, j int) {
-	w[i], w[j] = w[j], w[i]
-}
-func (w ByWindow) Less(i, j int) bool {
-	return w[i].Window < w[j].Window
-}
-
-// ByPriority is used to provide a consistent order for processing path expressions.
-type ByPriority []string
-
-// Implementation of sort.Interface.
-func (p ByPriority) Len() int {
-	return len(p)
-}
-func (p ByPriority) Swap(i, j int) {
-	p[i], p[j] = p[j], p[i]
-}
-func (p ByPriority) Less(i, j int) bool {
-
-	// "default" is always last in priority.
-	if p[i] == CATCHALL_EXPRESSION {
-		return false
-	}
-	if p[j] == CATCHALL_EXPRESSION {
-		return true
-	}
-
-	// Longer strings sort earlier.
-	if len(p[i]) > len(p[j]) {
-		return true
-	} else if len(p[i]) < len(p[j]) {
-		return false
-	}
-
-	// Same-length strings are ordered lexically.
-	return p[i] < p[j]
 }

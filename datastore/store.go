@@ -43,17 +43,6 @@ type StoreManager struct {
 	byExpr map[string]*runlist // Stats, by path within expression, for rollup processing
 }
 
-// nextTimeBoundary returns the time when the currently open time window closes.
-func nextTimeBoundary(baseTime time.Time, windowSize time.Duration) time.Time {
-	// This will round down before the halfway point.
-	b := baseTime.Round(windowSize)
-	if b.Before(baseTime) {
-		// It was rounded down, adjust up to next boundary.
-		b = b.Add(windowSize)
-	}
-	return b
-}
-
 func (sm *StoreManager) Init() {
 
 	// Copy in the configuration (requires hard restart to refresh).
@@ -175,7 +164,7 @@ func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 		// Determine which expression matches this path.
 		var expr string
 		for _, expr = range sm.rollupPriority {
-			if expr != config.CATCHALL_EXPRESSION {
+			if expr != config.ROLLUP_CATCHALL {
 				if sm.rollup[expr].Expression.MatchString(metric.Path) {
 					break
 				}
