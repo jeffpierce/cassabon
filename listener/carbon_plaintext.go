@@ -12,70 +12,31 @@ import (
 
 	"github.com/jeffpierce/cassabon/config"
 	"github.com/jeffpierce/cassabon/logging"
-	"github.com/jeffpierce/cassabon/pearson"
 )
 
-// peerState is an object used to detect changes in local host:port or in peer list.
-type peerState struct {
-	lastHostPort string   // For detection of whether our local host:port has changed
-	lastPeers    []string // For detection of whether the peer list has changed
-}
-
-// isInitialized indicates whether the structure has been initialized.
-func (ps *peerState) isInitialized() bool {
-	return ps.lastHostPort != ""
-}
-
-// setData initializes the structure with the given data.
-func (ps *peerState) setData(hostPort string, peers []string) {
-	ps.lastHostPort = hostPort
-	ps.lastPeers = make([]string, len(peers))
-	for i, v := range peers {
-		ps.lastPeers[i] = v
-	}
-}
-
-// isEqual indicates whether the current configuration is equal to the prior.
-func (ps *peerState) isEqual(hostPort string, peers []string) bool {
-	if ps.lastHostPort != hostPort {
-		return false
-	}
-	if len(ps.lastPeers) != len(peers) {
-		return false
-	}
-	for i, v := range ps.lastPeers {
-		if peers[i] != v {
-			return false
-		}
-	}
-	return true
-}
-
 type CarbonPlaintextListener struct {
-	lastPeerState peerState // State of peer list for comparison after a reload
+	peerList peerList
 }
 
 func (cpl *CarbonPlaintextListener) Init() {
-	cpl.lastPeerState = peerState{}
+	cpl.peerList = peerList{}
 }
 
 func (cpl *CarbonPlaintextListener) Start() {
 
-	// Determine whether we need to clear the rollup accumulators.
-	if !cpl.lastPeerState.isInitialized() {
-		// On first time here, initialize with current peer state.
-		cpl.lastPeerState.setData(config.G.Carbon.Listen, config.G.Carbon.Peers)
-	} else {
-		// Clear out our local accumulators if the peer list changed in any way.
-		if !cpl.lastPeerState.isEqual(config.G.Carbon.Listen, config.G.Carbon.Peers) {
-			config.G.Log.System.LogDebug("peerState::isEqual(): false")
-			config.G.OnPeerChangeReq <- struct{}{}
-			<-config.G.OnPeerChangeRsp
-			cpl.lastPeerState.setData(config.G.Carbon.Listen, config.G.Carbon.Peers)
-		}
+	// After first time through, check whether the peer list changed in any way.
+	if cpl.peerList.isInitialized() &&
+		!cpl.peerList.isEqual(config.G.Carbon.Listen, config.G.Carbon.Peers) {
+		// Peer list changed; clear out local accumulators, and block until done.
+		config.G.Log.System.LogDebug("peerList::isEqual(): false")
+		config.G.OnPeerChangeReq <- struct{}{} // Signal the data store
+		<-config.G.OnPeerChangeRsp             // Wait for data store to signal it is done
 	}
 
-	// Kick off goroutines to list for TCP and/or UDP traffic as specified.
+	// Start the Cassabon peer forwarder goroutine.
+	cpl.peerList.start(config.G.Carbon.Listen, config.G.Carbon.Peers)
+
+	// Kick off goroutines to listen for TCP and/or UDP traffic as specified.
 	switch config.G.Carbon.Protocol {
 	case "tcp":
 		config.G.OnReload1WG.Add(1)
@@ -252,16 +213,14 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 		return
 	}
 
-	// Assemble into canonical struct and send to queue manager.
-	//hash := int(pearson.Hash8(statPath)) // for debugging
-	peerIndex := int(pearson.Hash8(statPath)) % len(config.G.Carbon.Peers)
-	if config.G.Carbon.Listen == config.G.Carbon.Peers[peerIndex] {
-		//config.G.Log.System.LogInfo("Mine! %-30s %3d %d %s", statPath, hash, peerIndex, config.G.Carbon.Peers[peerIndex])
+	// Determine which Cassabon peer owns this path.
+	peerIndex, isMine := cpl.peerList.ownerOf(statPath)
+	if isMine {
+		// Assemble into canonical struct and send to queue manager.
 		config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
 	} else {
-		//config.G.Log.System.LogInfo("      %-30s %3d %d %s", statPath, hash, peerIndex, config.G.Carbon.Peers[peerIndex])
-		// TODO: Send to appropriate peer.
-		config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
+		// Send original input line to appropriate peer.
+		cpl.peerList.target <- indexedLine{peerIndex, line}
 	}
 	logging.Statsd.Client.Inc(config.G.Statsd.Events.ReceiveOK.Key, 1, config.G.Statsd.Events.ReceiveOK.SampleRate)
 }
