@@ -243,7 +243,7 @@ func LoadRollups() {
 		rd = new(RollupDef)
 		rd.Method = method
 		rd.Windows = make([]RollupWindow, 0)
-		if expression != CATCHALL_EXPRESSION {
+		if expression != ROLLUP_CATCHALL {
 			if re, err := regexp.Compile(expression); err == nil {
 				rd.Expression = re
 			} else {

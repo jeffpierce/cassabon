@@ -32,7 +32,7 @@ const (
 )
 
 // The string that represents the catchall rollup.
-const CATCHALL_EXPRESSION = "default"
+const ROLLUP_CATCHALL = "default"
 
 // RollupWindow is the definition of one rollup interval.
 type RollupWindow struct {

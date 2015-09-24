@@ -27,10 +27,10 @@ func (p ByPriority) Swap(i, j int) {
 func (p ByPriority) Less(i, j int) bool {
 
 	// "default" is always last in priority.
-	if p[i] == CATCHALL_EXPRESSION {
+	if p[i] == ROLLUP_CATCHALL {
 		return false
 	}
-	if p[j] == CATCHALL_EXPRESSION {
+	if p[j] == ROLLUP_CATCHALL {
 		return true
 	}
 
