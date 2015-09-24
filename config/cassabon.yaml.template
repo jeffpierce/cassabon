@@ -23,7 +23,7 @@ channels:
 # Configuration values that will be re-processed by daemon on SIGHUP
 #
 carbon:
-    # If address, port, or peers changes, all rollups will be flushed
+    # If listen address or peer list changes, all rollups will be flushed
     listen: "127.0.0.1:2003"
     protocol: "both"
     parameters:
