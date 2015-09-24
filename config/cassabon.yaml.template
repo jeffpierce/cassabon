@@ -1,4 +1,7 @@
+# Cassabon configuration
+#
 # Configuration values that are constant for the life of the daemon
+#
 logging:
     logdir: ""
     loglevel: "debug"    # The exception: will be re-read on SIGHUP
@@ -16,9 +19,11 @@ channels:
     datastorechanlen: 500
     indexstorechanlen: 10
     gopherchanlen: 100
+#
 # Configuration values that will be re-processed by daemon on SIGHUP
+#
 carbon:
-    # If address, port, or peers changes, all rollup accumulators will be flushed
+    # If address, port, or peers changes, all rollups will be flushed
     address: "127.0.0.1"
     port: 2003
     protocol: "tcp"
@@ -52,7 +57,10 @@ redis:
         pwd: ""
         sentinel: false
         master: ""
-# Rollups will only be re-processed when all rollup accumulators have been flushed
+#
+# Rollups could be re-processed when all rollup accumulators have been flushed,
+# but this is not implemented. Full restart is required when rollups change.
+#
 rollups:
   ^foo.*:
     retention:
