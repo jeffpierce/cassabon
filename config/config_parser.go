@@ -2,6 +2,7 @@ package config
 
 import (
 	"io/ioutil"
+	"net"
 	"os"
 	"regexp"
 	"sort"
@@ -154,12 +155,15 @@ func LoadRefreshableValues() {
 	G.Carbon.Protocol = rawCassabonConfig.Carbon.Protocol
 	G.Carbon.Peers = rawCassabonConfig.Carbon.Peers
 
-	// Ensure that the local address:port is in the peer list.
+	// Ensure addresses are valid, and that the local address:port is in the peer list.
 	localHostPort := G.Carbon.Listen
 	for _, v := range G.Carbon.Peers {
+		if _, err := net.ResolveTCPAddr("tcp4", v); err != nil {
+			G.Log.System.LogFatal("Invalid host:port \"%s\" in peer list: %v", v, err)
+			os.Exit(1)
+		}
 		if v == localHostPort {
 			localHostPort = ""
-			break
 		}
 	}
 	if localHostPort != "" {
