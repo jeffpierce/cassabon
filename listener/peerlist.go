@@ -10,20 +10,20 @@ type indexedLine struct {
 	statLine  string
 }
 
-// peerList contains an ordered list of Cassabon peers.
-type peerList struct {
+// PeerList contains an ordered list of Cassabon peers.
+type PeerList struct {
 	target   chan indexedLine // Channel for forwarding a stat line to a Cassabon peer
 	hostPort string           // Host:port on which the local server is listening
 	peers    []string         // Host:port information for all Cassabon peers (inclusive)
 }
 
 // isInitialized indicates whether the structure has ever been updated.
-func (pl *peerList) isInitialized() bool {
+func (pl *PeerList) IsInitialized() bool {
 	return pl.hostPort != ""
 }
 
 // start records the current peer list and starts the forwarder goroutine.
-func (pl *peerList) start(hostPort string, peers []string) {
+func (pl *PeerList) Start(hostPort string, peers []string) {
 
 	// Create the channel on which stats to forward are received.
 	pl.target = make(chan indexedLine, 1)
@@ -41,7 +41,7 @@ func (pl *peerList) start(hostPort string, peers []string) {
 }
 
 // isEqual indicates whether the given new configuration is equal to the current.
-func (pl *peerList) isEqual(hostPort string, peers []string) bool {
+func (pl *PeerList) IsEqual(hostPort string, peers []string) bool {
 	if pl.hostPort != hostPort {
 		return false
 	}
@@ -57,7 +57,7 @@ func (pl *peerList) isEqual(hostPort string, peers []string) bool {
 }
 
 // ownerOf determines which host owns a particular stats path.
-func (pl *peerList) ownerOf(statPath string) (int, bool) {
+func (pl *PeerList) OwnerOf(statPath string) (int, bool) {
 	peerIndex := int(pearson.Hash8(statPath)) % len(pl.peers)
 	if pl.hostPort == pl.peers[peerIndex] {
 		config.G.Log.System.LogInfo("Mine! %-30s %d %s", statPath, peerIndex, pl.peers[peerIndex])
@@ -69,14 +69,14 @@ func (pl *peerList) ownerOf(statPath string) (int, bool) {
 }
 
 // run listens for stat lines on a channel and sends them to the appropriate Cassabon peer.
-func (pl *peerList) run() {
+func (pl *PeerList) run() {
 
 	defer close(pl.target)
 
 	for {
 		select {
 		case <-config.G.OnReload2:
-			config.G.Log.System.LogDebug("peerList::run received QUIT message")
+			config.G.Log.System.LogDebug("PeerList::run received QUIT message")
 			config.G.OnReload2WG.Done()
 			return
 		case il := <-pl.target:

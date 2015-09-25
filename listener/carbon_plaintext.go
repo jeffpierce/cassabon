@@ -15,18 +15,18 @@ import (
 )
 
 type CarbonPlaintextListener struct {
-	peerList peerList
+	peerList PeerList
 }
 
 func (cpl *CarbonPlaintextListener) Init() {
-	cpl.peerList = peerList{}
+	cpl.peerList = PeerList{}
 }
 
 func (cpl *CarbonPlaintextListener) Start() {
 
 	// After first time through, check whether the peer list changed in any way.
-	if cpl.peerList.isInitialized() &&
-		!cpl.peerList.isEqual(config.G.Carbon.Listen, config.G.Carbon.Peers) {
+	if cpl.peerList.IsInitialized() &&
+		!cpl.peerList.IsEqual(config.G.Carbon.Listen, config.G.Carbon.Peers) {
 		// Peer list changed; clear out local accumulators, and block until done.
 		config.G.Log.System.LogDebug("peerList::isEqual(): false")
 		config.G.OnPeerChangeReq <- struct{}{} // Signal the data store
@@ -34,7 +34,7 @@ func (cpl *CarbonPlaintextListener) Start() {
 	}
 
 	// Start the Cassabon peer forwarder goroutine.
-	cpl.peerList.start(config.G.Carbon.Listen, config.G.Carbon.Peers)
+	cpl.peerList.Start(config.G.Carbon.Listen, config.G.Carbon.Peers)
 
 	// Kick off goroutines to listen for TCP and/or UDP traffic as specified.
 	switch config.G.Carbon.Protocol {
@@ -214,7 +214,7 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 	}
 
 	// Determine which Cassabon peer owns this path.
-	peerIndex, isMine := cpl.peerList.ownerOf(statPath)
+	peerIndex, isMine := cpl.peerList.OwnerOf(statPath)
 	if isMine {
 		// Assemble into canonical struct and send to queue manager.
 		config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
