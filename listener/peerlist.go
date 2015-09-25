@@ -25,6 +25,9 @@ func (pl *peerList) isInitialized() bool {
 // start records the current peer list and starts the forwarder goroutine.
 func (pl *peerList) start(hostPort string, peers []string) {
 
+	// Create the channel on which stats to forward are received.
+	pl.target = make(chan indexedLine, 1)
+
 	// Record the current set of peers.
 	pl.hostPort = hostPort
 	pl.peers = make([]string, len(peers))
@@ -68,8 +71,6 @@ func (pl *peerList) ownerOf(statPath string) (int, bool) {
 // run listens for stat lines on a channel and sends them to the appropriate Cassabon peer.
 func (pl *peerList) run() {
 
-	// Create the channel on which stats to forward are received.
-	pl.target = make(chan indexedLine, 1)
 	defer close(pl.target)
 
 	for {
