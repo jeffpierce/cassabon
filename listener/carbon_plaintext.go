@@ -20,6 +20,7 @@ type CarbonPlaintextListener struct {
 
 func (cpl *CarbonPlaintextListener) Init() {
 	cpl.peerList = PeerList{}
+	cpl.peerList.Init()
 }
 
 func (cpl *CarbonPlaintextListener) Start() {
