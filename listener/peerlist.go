@@ -1,6 +1,8 @@
 package listener
 
 import (
+	"sync"
+
 	"github.com/jeffpierce/cassabon/config"
 	"github.com/jeffpierce/cassabon/pearson"
 )
@@ -16,6 +18,7 @@ type PeerList struct {
 	hostPort string           // Host:port on which the local server is listening
 	peers    []string         // Host:port information for all Cassabon peers (inclusive)
 	conns    map[string]*StubbornTCPConn
+	self     sync.RWMutex
 }
 
 func (pl *PeerList) Init() {
@@ -29,6 +32,10 @@ func (pl *PeerList) IsInitialized() bool {
 
 // start records the current peer list and starts the forwarder goroutine.
 func (pl *PeerList) Start(hostPort string, peers []string) {
+
+	// Synchronize access by other goroutines.
+	pl.self.Lock()
+	defer pl.self.Unlock()
 
 	// Create the channel on which stats to forward are received.
 	pl.target = make(chan indexedLine, 1)
@@ -67,6 +74,11 @@ func (pl *PeerList) Start(hostPort string, peers []string) {
 
 // isEqual indicates whether the given new configuration is equal to the current.
 func (pl *PeerList) IsEqual(hostPort string, peers []string) bool {
+
+	// Synchronize access by other goroutines.
+	pl.self.RLock()
+	defer pl.self.RUnlock()
+
 	if pl.hostPort != hostPort {
 		return false
 	}
@@ -78,6 +90,7 @@ func (pl *PeerList) IsEqual(hostPort string, peers []string) bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -88,6 +101,29 @@ func (pl *PeerList) OwnerOf(statPath string) (int, bool) {
 		return peerIndex, true
 	} else {
 		return peerIndex, false
+	}
+}
+
+// PropagatePeerList sends the current peer list to all known peers.
+func (pl *PeerList) PropagatePeerList() {
+
+	// Build a comma-separated list of peers.
+	var cmd string
+	for _, v := range pl.peers {
+		if cmd != "" {
+			cmd = cmd + ","
+		}
+		cmd = cmd + v
+	}
+
+	// Build the command to be sent.
+	cmd = "{{peerlist=" + cmd + "}}"
+
+	// Send the command to each peer.
+	for i, v := range pl.peers {
+		if v != pl.hostPort {
+			pl.target <- indexedLine{i, cmd}
+		}
 	}
 }
 
