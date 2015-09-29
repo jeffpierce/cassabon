@@ -9,7 +9,7 @@ _test
 build
 
 # Developer-specific files
-config/cassabon.yaml
+config/*.yaml
 config/healthcheckfile
 
 # Build artifacts
