@@ -155,7 +155,7 @@ func ValidatePeerList(localHostPort string, peers []string) error {
 		}
 	}
 	if localHostPort != "" {
-		return fmt.Errorf("Local host:port %s is not in peer list: %v", localHostPort, G.Carbon.Peers)
+		return fmt.Errorf("Local host:port %s is not in peer list: %v", localHostPort, peers)
 	}
 
 	return nil
