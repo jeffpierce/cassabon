@@ -174,15 +174,15 @@ func LoadRefreshableValues() {
 	G.Carbon.Protocol = rawCassabonConfig.Carbon.Protocol
 	G.Carbon.Peers = rawCassabonConfig.Carbon.Peers
 
+	// Ensure a canonical order for Cassabon peers, as we will allocate
+	// metrics paths to a peer by indexing into this array.
+	sort.Strings(G.Carbon.Peers)
+
 	// Ensure addresses are valid, and that the local address:port is in the peer list.
 	if err := ValidatePeerList(G.Carbon.Listen, G.Carbon.Peers); err != nil {
 		G.Log.System.LogFatal(err.Error())
 		os.Exit(1)
 	}
-
-	// Ensure a canonical order for Cassabon peers, as we will allocate
-	// metrics paths to a peer by indexing into this array.
-	sort.Strings(G.Carbon.Peers)
 
 	// Copy in and sanitize the Carbon TCP listener timeout.
 	G.Carbon.Parameters.TCPTimeout = rawCassabonConfig.Carbon.Parameters.TCPTimeout
