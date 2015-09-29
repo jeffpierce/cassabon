@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
@@ -142,6 +143,24 @@ func LoadStartupValues() {
 	}
 }
 
+// ValidatePeerList ensures addresses are valid, and that the local address is in the peer list.
+func ValidatePeerList(localHostPort string, peers []string) error {
+
+	for _, v := range peers {
+		if _, err := net.ResolveTCPAddr("tcp4", v); err != nil {
+			return fmt.Errorf("Invalid host:port \"%s\" in peer list: %v", v, err)
+		}
+		if v == localHostPort {
+			localHostPort = ""
+		}
+	}
+	if localHostPort != "" {
+		return fmt.Errorf("Local host:port %s is not in peer list: %v", localHostPort, G.Carbon.Peers)
+	}
+
+	return nil
+}
+
 // LoadRefreshableValues populates the global config objectwith values that
 // take effect again on receipt of a SIGHUP.
 func LoadRefreshableValues() {
@@ -156,18 +175,8 @@ func LoadRefreshableValues() {
 	G.Carbon.Peers = rawCassabonConfig.Carbon.Peers
 
 	// Ensure addresses are valid, and that the local address:port is in the peer list.
-	localHostPort := G.Carbon.Listen
-	for _, v := range G.Carbon.Peers {
-		if _, err := net.ResolveTCPAddr("tcp4", v); err != nil {
-			G.Log.System.LogFatal("Invalid host:port \"%s\" in peer list: %v", v, err)
-			os.Exit(1)
-		}
-		if v == localHostPort {
-			localHostPort = ""
-		}
-	}
-	if localHostPort != "" {
-		G.Log.System.LogFatal("Local host:port %s is not in peer list: %v", localHostPort, G.Carbon.Peers)
+	if err := ValidatePeerList(G.Carbon.Listen, G.Carbon.Peers); err != nil {
+		G.Log.System.LogFatal(err.Error())
 		os.Exit(1)
 	}
 
