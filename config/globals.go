@@ -56,6 +56,7 @@ type Globals struct {
 	// Goroutine management.
 	// Note: Anything that accepts input should shut down first, so it should
 	// monitor OnReload1. Everything else should monitor OnReload2.
+	OnPeerChange    chan struct{}
 	OnPeerChangeReq chan struct{}
 	OnPeerChangeRsp chan struct{}
 	OnReload1       chan struct{}

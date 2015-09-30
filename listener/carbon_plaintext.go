@@ -6,76 +6,50 @@ import (
 	"bytes"
 	"net"
 	"os"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jeffpierce/cassabon/config"
 	"github.com/jeffpierce/cassabon/logging"
-	"github.com/jeffpierce/cassabon/pearson"
 )
 
-// peerState is an object used to detect changes in local host:port or in peer list.
-type peerState struct {
-	lastHostPort string   // For detection of whether our local host:port has changed
-	lastPeers    []string // For detection of whether the peer list has changed
-}
-
-// isInitialized indicates whether the structure has been initialized.
-func (ps *peerState) isInitialized() bool {
-	return ps.lastHostPort != ""
-}
-
-// setData initializes the structure with the given data.
-func (ps *peerState) setData(hostPort string, peers []string) {
-	ps.lastHostPort = hostPort
-	ps.lastPeers = make([]string, len(peers))
-	for i, v := range peers {
-		ps.lastPeers[i] = v
-	}
-}
-
-// isEqual indicates whether the current configuration is equal to the prior.
-func (ps *peerState) isEqual(hostPort string, peers []string) bool {
-	if ps.lastHostPort != hostPort {
-		return false
-	}
-	if len(ps.lastPeers) != len(peers) {
-		return false
-	}
-	for i, v := range ps.lastPeers {
-		if peers[i] != v {
-			return false
-		}
-	}
-	return true
-}
-
 type CarbonPlaintextListener struct {
-	lastPeerState peerState // State of peer list for comparison after a reload
+	peerMsg         *regexp.Regexp
+	peerCmdPeerlist *regexp.Regexp
+	peerList        PeerList
 }
 
 func (cpl *CarbonPlaintextListener) Init() {
-	cpl.lastPeerState = peerState{}
+	cpl.peerMsg = regexp.MustCompile("^{{([a-z]+)=.*}}$")      // "{{cmd=<command-specific-string>}}"
+	cpl.peerCmdPeerlist = regexp.MustCompile("[0-9.]+:[0-9]+") // 127.0.0.1:2003,127.0.0.1:2013, ...
+	cpl.peerList = PeerList{}
+	cpl.peerList.Init()
 }
 
 func (cpl *CarbonPlaintextListener) Start() {
 
-	// Determine whether we need to clear the rollup accumulators.
-	if !cpl.lastPeerState.isInitialized() {
-		// On first time here, initialize with current peer state.
-		cpl.lastPeerState.setData(config.G.Carbon.Listen, config.G.Carbon.Peers)
-	} else {
-		// Clear out our local accumulators if the peer list changed in any way.
-		if !cpl.lastPeerState.isEqual(config.G.Carbon.Listen, config.G.Carbon.Peers) {
-			config.G.Log.System.LogDebug("peerState::isEqual(): false")
-			config.G.OnPeerChangeReq <- struct{}{}
-			<-config.G.OnPeerChangeRsp
-			cpl.lastPeerState.setData(config.G.Carbon.Listen, config.G.Carbon.Peers)
-		}
+	// After first time through, check whether the peer list changed in any way.
+	var propagatePeerList bool = false
+	if cpl.peerList.IsInitialized() &&
+		!cpl.peerList.IsEqual(config.G.Carbon.Listen, config.G.Carbon.Peers) {
+		// Peer list changed; clear out local accumulators, and block until done.
+		config.G.Log.System.LogDebug("peerList::isEqual(): false")
+		config.G.OnPeerChangeReq <- struct{}{} // Signal the data store
+		<-config.G.OnPeerChangeRsp             // Wait for data store to signal it is done
+		propagatePeerList = true
 	}
 
-	// Kick off goroutines to list for TCP and/or UDP traffic as specified.
+	// Start the Cassabon peer forwarder goroutine.
+	cpl.peerList.Start(config.G.Carbon.Listen, config.G.Carbon.Peers)
+	if propagatePeerList {
+		// This must be done AFTER Start() to avoid deadlock.
+		cpl.peerList.PropagatePeerList()
+	}
+
+	// Kick off goroutines to listen for TCP and/or UDP traffic as specified.
 	switch config.G.Carbon.Protocol {
 	case "tcp":
 		config.G.OnReload1WG.Add(1)
@@ -224,6 +198,13 @@ func (cpl *CarbonPlaintextListener) getUDPData(buf string) {
 // metricHandler reads, parses, and sends on a Carbon data packet.
 func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 
+	// Inspect input for a message from a Cassabon peer.
+	if cmd := cpl.peerMsg.FindStringSubmatch(line); len(cmd) > 1 {
+		// Act on the command, and return.
+		cpl.processPeerCommand(cmd[1], line)
+		return
+	}
+
 	// Examine metric to ensure that it's a valid carbon metric triplet.
 	splitMetric := strings.Fields(line)
 	if len(splitMetric) != 3 {
@@ -252,16 +233,36 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 		return
 	}
 
-	// Assemble into canonical struct and send to queue manager.
-	//hash := int(pearson.Hash8(statPath)) // for debugging
-	peerIndex := int(pearson.Hash8(statPath)) % len(config.G.Carbon.Peers)
-	if config.G.Carbon.Listen == config.G.Carbon.Peers[peerIndex] {
-		//config.G.Log.System.LogInfo("Mine! %-30s %3d %d %s", statPath, hash, peerIndex, config.G.Carbon.Peers[peerIndex])
+	// Determine which Cassabon peer owns this path.
+	peerIndex, isMine := cpl.peerList.OwnerOf(statPath)
+	if isMine {
+		// Assemble into canonical struct and send to queue manager.
 		config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
 	} else {
-		//config.G.Log.System.LogInfo("      %-30s %3d %d %s", statPath, hash, peerIndex, config.G.Carbon.Peers[peerIndex])
-		// TODO: Send to appropriate peer.
-		config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
+		// Send original input line to appropriate peer.
+		cpl.peerList.target <- indexedLine{peerIndex, line}
 	}
 	logging.Statsd.Client.Inc(config.G.Statsd.Events.ReceiveOK.Key, 1, config.G.Statsd.Events.ReceiveOK.SampleRate)
+}
+
+// processPeerCommand acts on commands from Cassabon peers.
+func (cpl *CarbonPlaintextListener) processPeerCommand(cmd, line string) {
+	switch cmd {
+	case "peerlist":
+		peers := cpl.peerCmdPeerlist.FindAllString(line, -1)
+		sort.Strings(peers)
+		config.G.Log.System.LogInfo("Command: peerlist=%q", peers)
+		if err := config.ValidatePeerList(config.G.Carbon.Listen, peers); err != nil {
+			config.G.Log.System.LogWarn("peerlist error: %v", err)
+		} else {
+			// Is this peer list different from the one in current use?
+			if !cpl.peerList.IsEqual(config.G.Carbon.Listen, peers) {
+				config.G.Log.System.LogInfo("Peer list changed, flushing and reloading")
+				config.G.Carbon.Peers = peers
+				config.G.OnPeerChange <- struct{}{}
+			}
+		}
+	default:
+		config.G.Log.System.LogWarn("Invalid peer command received: %q", line)
+	}
 }

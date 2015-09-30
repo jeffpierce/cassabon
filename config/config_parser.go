@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"regexp"
 	"sort"
@@ -141,6 +143,24 @@ func LoadStartupValues() {
 	}
 }
 
+// ValidatePeerList ensures addresses are valid, and that the local address is in the peer list.
+func ValidatePeerList(localHostPort string, peers []string) error {
+
+	for _, v := range peers {
+		if _, err := net.ResolveTCPAddr("tcp4", v); err != nil {
+			return fmt.Errorf("Invalid host:port \"%s\" in peer list: %v", v, err)
+		}
+		if v == localHostPort {
+			localHostPort = ""
+		}
+	}
+	if localHostPort != "" {
+		return fmt.Errorf("Local host:port %s is not in peer list: %v", localHostPort, peers)
+	}
+
+	return nil
+}
+
 // LoadRefreshableValues populates the global config objectwith values that
 // take effect again on receipt of a SIGHUP.
 func LoadRefreshableValues() {
@@ -154,22 +174,15 @@ func LoadRefreshableValues() {
 	G.Carbon.Protocol = rawCassabonConfig.Carbon.Protocol
 	G.Carbon.Peers = rawCassabonConfig.Carbon.Peers
 
-	// Ensure that the local address:port is in the peer list.
-	localHostPort := G.Carbon.Listen
-	for _, v := range G.Carbon.Peers {
-		if v == localHostPort {
-			localHostPort = ""
-			break
-		}
-	}
-	if localHostPort != "" {
-		G.Log.System.LogFatal("Local host:port %s is not in peer list: %v", localHostPort, G.Carbon.Peers)
-		os.Exit(1)
-	}
-
 	// Ensure a canonical order for Cassabon peers, as we will allocate
 	// metrics paths to a peer by indexing into this array.
 	sort.Strings(G.Carbon.Peers)
+
+	// Ensure addresses are valid, and that the local address:port is in the peer list.
+	if err := ValidatePeerList(G.Carbon.Listen, G.Carbon.Peers); err != nil {
+		G.Log.System.LogFatal(err.Error())
+		os.Exit(1)
+	}
 
 	// Copy in and sanitize the Carbon TCP listener timeout.
 	G.Carbon.Parameters.TCPTimeout = rawCassabonConfig.Carbon.Parameters.TCPTimeout

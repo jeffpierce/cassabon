@@ -17,10 +17,10 @@ func TestCarbonSocket(t *testing.T) {
 
 	fmt.Println("Testing TCP socket connection...")
 	cpl := new(CarbonPlaintextListener)
-	go cpl.carbonTCP("127.0.0.1", "2003")
+	go cpl.carbonTCP("127.0.0.1:2003")
 
 	fmt.Println("Testing UDP socket connection...")
-	go cpl.carbonUDP("127.0.0.1", "2003")
+	go cpl.carbonUDP("127.0.0.1:2003")
 
 	time.Sleep(10)
 

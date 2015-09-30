@@ -76,6 +76,7 @@ func main() {
 	defer logging.Statsd.Close()
 
 	// Create all the inter-process communication channels.
+	config.G.OnPeerChange = make(chan struct{}, 1)
 	config.G.OnPeerChangeReq = make(chan struct{}, 1)
 	config.G.OnPeerChangeRsp = make(chan struct{}, 1)
 	config.G.OnExit = make(chan struct{}, 1)
@@ -123,10 +124,18 @@ func main() {
 		// Start Cassabon Web API
 		api := new(api.CassabonAPI)
 		api.Start()
+		config.G.Log.System.LogInfo("Initialization complete")
 
 		// Wait for receipt of a recognized signal.
-		config.G.Log.System.LogInfo("Initialization complete")
 		select {
+
+		case <-config.G.OnPeerChange:
+			config.G.Log.System.LogInfo("Received OnPeerChange")
+			api.Stop()                  // Notify API to stop
+			close(config.G.OnReload1)   // Notify all externally-listening goroutines to exit
+			config.G.OnReload1WG.Wait() // Wait for them to exit
+			close(config.G.OnReload2)   // Notify all reloadable goroutines to exit
+			config.G.OnReload2WG.Wait() // Wait for them to exit
 
 		case <-sighup:
 			config.G.Log.System.LogInfo("Received SIGHUP")
