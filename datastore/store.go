@@ -327,7 +327,7 @@ func (sm *StoreManager) flush(terminating bool) {
 
 // flush persists the accumulated metrics to the database.
 func (sm *StoreManager) write(path string, ts time.Time, value float64, ttl string) {
-	if err := sm.dbClient.Query("INSERT INTO cassabon.rollup_%s (path, timestamp, stat) VALUES (%v, %v, %v)",
+	if err := sm.dbClient.Query("INSERT INTO cassabon.%s (path, timestamp, stat) VALUES (%v, %v, %v)",
 		ttl, path, ts, value).Exec(); err != nil {
 		// Could not write to Cassandra cluster...we should scream loudly about this.  Possibly a failure case?.
 		config.G.Log.System.LogError("Unable to write stats to Cassandra cluster, error is %s", err.Error())
