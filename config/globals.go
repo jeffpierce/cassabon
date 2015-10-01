@@ -38,6 +38,7 @@ const ROLLUP_CATCHALL = "default"
 type RollupWindow struct {
 	Window    time.Duration
 	Retention time.Duration
+	Table     string // The Cassandra table to which this window is written
 }
 
 // RollupDef is the definition of how to process a path expression.

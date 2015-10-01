@@ -84,6 +84,10 @@ func (sm *StoreManager) resetRollupData() {
 	}
 }
 
+func (sm *StoreManager) checkSchema() {
+	// Keyspace exists since we have a successful dbClient connection, create tables if they do not exist
+}
+
 func (sm *StoreManager) run() {
 
 	// Perform first-time initialization of rollup data accumulation structures.
@@ -251,7 +255,7 @@ func (sm *StoreManager) flush(terminating bool) {
 							path,
 							rollup.value[i])
 
-						sm.write(path, windowEnd, rollup.value[i])
+						sm.write(path, windowEnd, rollup.value[i], sm.rollup[expr].Windows[i].Table)
 					}
 
 					// Ensure the bucket is empty for the next open window.
@@ -280,7 +284,7 @@ func (sm *StoreManager) flush(terminating bool) {
 							path,
 							rollup.value[i])
 
-						sm.write(path, baseTime, rollup.value[i])
+						sm.write(path, baseTime, rollup.value[i], sm.rollup[expr].Windows[i].Table)
 					}
 
 					// Ensure the bucket is empty for the next open window.
@@ -322,5 +326,10 @@ func (sm *StoreManager) flush(terminating bool) {
 }
 
 // flush persists the accumulated metrics to the database.
-func (sm *StoreManager) write(path string, ts time.Time, value float64) {
+func (sm *StoreManager) write(path string, ts time.Time, value float64, ttl string) {
+	if err := sm.dbClient.Query("INSERT INTO cassabon.rollup_%s (path, timestamp, stat) VALUES (%v, %v, %v)",
+		ttl, path, ts, value).Exec(); err != nil {
+		// Could not write to Cassandra cluster...we should scream loudly about this.  Possibly a failure case?.
+		config.G.Log.System.LogError("Unable to write stats to Cassandra cluster, error is %s", err.Error())
+	}
 }

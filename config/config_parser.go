@@ -331,8 +331,10 @@ func LoadRollups() {
 				continue
 			}
 
+			table := fmt.Sprintf("rollup_%s", strconv.FormatFloat(retention.Seconds(), 'g', -1, 64))
+
 			// Append to the rollups for this expression.
-			rd.Windows = append(rd.Windows, RollupWindow{window, retention})
+			rd.Windows = append(rd.Windows, RollupWindow{window, retention, table})
 		}
 
 		// If any of the rollup window definitions were valid, add expression to the list.
