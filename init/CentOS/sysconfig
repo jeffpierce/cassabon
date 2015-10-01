@@ -1,0 +1,16 @@
+# Settings for Cassabon
+
+# The unprivileged user to run as.
+USER=change
+
+# Where the pid file should be written.
+PIDFILE=/var/run/cassabon.pid
+
+# The full path to the executable.
+EXEC=/usr/local/bin/cassabon
+
+# The options to pass to daemonize.
+DOPTIONS=
+
+# The options to pass to the application.
+OPTIONS=-conf=/etc/cassabon.yaml
