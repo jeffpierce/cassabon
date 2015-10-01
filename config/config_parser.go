@@ -168,6 +168,27 @@ func LoadRefreshableValues() {
 	// Copy in the logging level (can be changed while running).
 	G.Log.Loglevel = rawCassabonConfig.Logging.Loglevel
 
+	// If the listen address is "0.0.0.0", replace it with the address of
+	// the first non-localhost, non-IPv6 address found for this machine.
+	if lh, lp, err := net.SplitHostPort(rawCassabonConfig.Carbon.Listen); err == nil {
+		// Is this "0.0.0.0"?
+		if net.ParseIP(lh).IsUnspecified() {
+			// Enumerate all local addresses in CIDR format.
+			if addr, err := net.InterfaceAddrs(); err == nil {
+				for _, v := range addr {
+					if ip, _, err := net.ParseCIDR(v.String()); err == nil {
+						// Skip loopback and IPv6 addresses.
+						if !ip.IsLoopback() && !strings.Contains(ip.String(), ":") {
+							rawCassabonConfig.Carbon.Listen = net.JoinHostPort(ip.String(), lp)
+							// That's the one we want, we're done.
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// Copy in the Carbon listener configuration.
 	// NOTE: If any of these change, all rollup accumulators must be flushed.
 	G.Carbon.Listen = rawCassabonConfig.Carbon.Listen
