@@ -335,13 +335,13 @@ func LoadRollups() {
 			table := fmt.Sprintf("rollup_%09d", uint64(retention.Seconds()))
 			found := false
 			for _, v := range G.RollupTables {
-				if tablename == v {
+				if table == v {
 					found = true
 					break
 				}
 			}
 			if !found {
-				G.RollupTables = append(G.RollupTables, tablename)
+				G.RollupTables = append(G.RollupTables, table)
 			}
 
 			// Append to the rollups for this expression.
