@@ -119,4 +119,5 @@ type Globals struct {
 	// Configuration of data rollups.
 	RollupPriority []string             // First matched expression wins
 	Rollup         map[string]RollupDef // Rollup processing definitions by path expression
+	RollupTables   []string             // The Cassandra table names derived from extant durations
 }
