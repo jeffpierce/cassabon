@@ -21,7 +21,7 @@ func TestLogger(t *testing.T) {
 	L.Close()
 
 	L.Open(LOGFILE, Debug)
-	L.LogFatal("Logging at level DEBUG")
+	L.emit(Fatal, "Logging at level DEBUG")
 	L.LogDebug("Hello %s!", "debug")
 	L.LogInfo("Hello %s!", "info")
 	L.LogWarn("Hello %s!", "warn")
@@ -29,7 +29,7 @@ func TestLogger(t *testing.T) {
 	L.Close()
 
 	L.Open(LOGFILE, Info)
-	L.LogFatal("Logging at level INFO")
+	L.emit(Fatal, "Logging at level INFO")
 	L.LogDebug("Hello %s!", "debug")
 	L.LogInfo("Hello %s!", "info")
 	L.LogWarn("Hello %s!", "warn")
@@ -37,7 +37,7 @@ func TestLogger(t *testing.T) {
 	L.Close()
 
 	L.Open(LOGFILE, Warn)
-	L.LogFatal("Logging at level WARN")
+	L.emit(Fatal, "Logging at level WARN")
 	L.LogDebug("Hello %s!", "debug")
 	L.LogInfo("Hello %s!", "info")
 	L.LogWarn("Hello %s!", "warn")
@@ -45,7 +45,7 @@ func TestLogger(t *testing.T) {
 	L.Close()
 
 	L.Open(LOGFILE, Error)
-	L.LogFatal("Logging at level ERROR")
+	L.emit(Fatal, "Logging at level ERROR")
 	L.LogDebug("Hello %s!", "debug")
 	L.LogInfo("Hello %s!", "info")
 	L.LogWarn("Hello %s!", "warn")
@@ -53,7 +53,7 @@ func TestLogger(t *testing.T) {
 	L.Close()
 
 	L.Open(LOGFILE, Fatal)
-	L.LogFatal("Logging at level FATAL")
+	L.emit(Fatal, "Logging at level FATAL")
 	L.LogDebug("Hello %s!", "debug")
 	L.LogInfo("Hello %s!", "info")
 	L.LogWarn("Hello %s!", "warn")

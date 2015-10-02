@@ -38,7 +38,7 @@ func main() {
 
 	// Read the configuration file from disk.
 	if err := config.ReadConfigurationFile(confFile); err != nil {
-		panic(fmt.Errorf("Unable to load configuration: %v", err))
+		config.G.Log.System.LogFatal("Unable to load configuration: %v", err)
 	}
 	// Populate the global config with values used only once.
 	config.LoadStartupValues()

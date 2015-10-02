@@ -1,7 +1,6 @@
 package datastore
 
 import (
-	"os"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -101,7 +100,6 @@ func (sm *StoreManager) run() {
 		// Without Cassandra client we can't do our job, so log, whine, and crash.
 		config.G.Log.System.LogFatal("StoreManager unable to connect to Cassandra at %v, port %s: %v",
 			config.G.Cassandra.Hosts, config.G.Cassandra.Port, err)
-		os.Exit(10)
 	}
 
 	defer sm.dbClient.Close()

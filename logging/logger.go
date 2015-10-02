@@ -184,6 +184,7 @@ func (l *FileLogger) LogFatal(format string, a ...interface{}) {
 		defer l.m.RUnlock()
 		l.emit(Fatal, format, a...)
 	}
+	panic(fmt.Errorf(format, a...))
 }
 
 // reopen closes and re-opens the log file to support log rotation.
@@ -208,14 +209,9 @@ func (l *FileLogger) openLogfile() *os.File {
 			// DO NOT call the public Log() method, you will cause a deadlock.
 			l.emit(Fatal, "Unable to reopen logfile '%v'. Error: '%v'", l.logFilename, err)
 			l.logFile.Close()
-		} else {
-			// The startup case.
-			// Warning: when started as a daemon, this may go to /dev/null.
-			fmt.Printf("[-] ["+severityText[Fatal]+"] Unable to open logfile '%v'. Error: '%v'\n", l.logFilename, err)
 		}
-		// Inability to log is a fatal error; die with a non-zero exit code.
-		// We do not run blind.
-		os.Exit(1)
+		// Inability to log is a fatal error. We do not run blind.
+		panic(fmt.Errorf("Unable to (re)open logfile '%v'. Error: '%v'", l.logFilename, err))
 	}
 
 	return fp

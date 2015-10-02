@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -188,7 +187,6 @@ func LoadRefreshableValues() {
 	// Ensure addresses are valid, and that the local address:port is in the peer list.
 	if err := ValidatePeerList(G.Carbon.Listen, G.Carbon.Peers); err != nil {
 		G.Log.System.LogFatal(err.Error())
-		os.Exit(1)
 	}
 
 	// Copy in and sanitize the Carbon TCP listener timeout.
