@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -16,6 +17,13 @@ import (
 
 func main() {
 
+	// Recover cleanly from panics with a message to stderr.
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Fprintf(os.Stderr, "ABORT: %v\n", err)
+		}
+	}()
+
 	// The name of the YAML configuration file.
 	var confFile string
 
@@ -24,9 +32,8 @@ func main() {
 	flag.Parse()
 
 	// Read the configuration file from disk.
-	// This will PANIC ON ERRORS, because the logger is not yet available.
 	if err := config.ReadConfigurationFile(confFile); err != nil {
-		panic(err)
+		panic(fmt.Errorf("Unable to load configuration: %v", err))
 	}
 	// Populate the global config with values used only once.
 	config.LoadStartupValues()
