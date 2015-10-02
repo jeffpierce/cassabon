@@ -25,7 +25,9 @@ func main() {
 
 	// Read the configuration file from disk.
 	// This will PANIC ON ERRORS, because the logger is not yet available.
-	config.ReadConfigurationFile(confFile, false)
+	if err := config.ReadConfigurationFile(confFile); err != nil {
+		panic(err)
+	}
 	// Populate the global config with values used only once.
 	config.LoadStartupValues()
 
@@ -106,7 +108,7 @@ func main() {
 		// Re-read the configuration to get any updated values.
 		if configIsStale {
 			config.G.Log.System.LogInfo("Reading configuration file %s", confFile)
-			if err := config.ReadConfigurationFile(confFile, true); err != nil {
+			if err := config.ReadConfigurationFile(confFile); err != nil {
 				config.G.Log.System.LogError("Unable to load configuration: %v", err)
 			} else {
 				config.LoadRefreshableValues()

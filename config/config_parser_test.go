@@ -8,7 +8,7 @@ import (
 
 func TestParseConfig(t *testing.T) {
 	// Load yaml into config struct
-	ReadConfigurationFile("config_test.yaml", false)
+	ReadConfigurationFile("config_test.yaml")
 
 	/*
 		// Ensure we have a struct
