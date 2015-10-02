@@ -31,6 +31,11 @@ func main() {
 	flag.StringVar(&confFile, "conf", "config/cassabon.yaml", "Location of YAML configuration file.")
 	flag.Parse()
 
+	// Create the loggers.
+	config.G.Log.System = logging.NewLogger("system")
+	config.G.Log.Carbon = logging.NewLogger("carbon")
+	config.G.Log.API = logging.NewLogger("api")
+
 	// Read the configuration file from disk.
 	if err := config.ReadConfigurationFile(confFile); err != nil {
 		panic(fmt.Errorf("Unable to load configuration: %v", err))
@@ -42,13 +47,13 @@ func main() {
 	sev, errLogLevel := logging.TextToSeverity(config.G.Log.Loglevel)
 	if config.G.Log.Logdir != "" {
 		logDir, _ := filepath.Abs(config.G.Log.Logdir)
-		config.G.Log.System = logging.NewLogger("system", filepath.Join(logDir, "cassabon.system.log"), sev)
-		config.G.Log.Carbon = logging.NewLogger("carbon", filepath.Join(logDir, "cassabon.carbon.log"), sev)
-		config.G.Log.API = logging.NewLogger("api", filepath.Join(logDir, "cassabon.api.log"), logging.Unclassified)
+		config.G.Log.System.Open(filepath.Join(logDir, "cassabon.system.log"), sev)
+		config.G.Log.Carbon.Open(filepath.Join(logDir, "cassabon.carbon.log"), sev)
+		config.G.Log.API.Open(filepath.Join(logDir, "cassabon.api.log"), logging.Unclassified)
 	} else {
-		config.G.Log.System = logging.NewLogger("system", "", sev)
-		config.G.Log.Carbon = logging.NewLogger("carbon", "", sev)
-		config.G.Log.API = logging.NewLogger("api", "", logging.Unclassified)
+		config.G.Log.System.Open("", sev)
+		config.G.Log.Carbon.Open("", sev)
+		config.G.Log.API.Open("", logging.Unclassified)
 	}
 	defer config.G.Log.System.Close()
 	defer config.G.Log.Carbon.Close()

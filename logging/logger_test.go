@@ -14,12 +14,13 @@ func TestLogger(t *testing.T) {
 	os.Remove(LOGFILE)
 
 	L := new(FileLogger)
+	L.init(FACILITY)
 
-	L.open(FACILITY, "", Debug)
+	L.Open("", Debug)
 	L.LogDebug("Hello %s!", "world")
 	L.Close()
 
-	L.open(FACILITY, LOGFILE, Debug)
+	L.Open(LOGFILE, Debug)
 	L.LogFatal("Logging at level DEBUG")
 	L.LogDebug("Hello %s!", "debug")
 	L.LogInfo("Hello %s!", "info")
@@ -27,7 +28,7 @@ func TestLogger(t *testing.T) {
 	L.LogError("Hello %s!", "error")
 	L.Close()
 
-	L.open(FACILITY, LOGFILE, Info)
+	L.Open(LOGFILE, Info)
 	L.LogFatal("Logging at level INFO")
 	L.LogDebug("Hello %s!", "debug")
 	L.LogInfo("Hello %s!", "info")
@@ -35,7 +36,7 @@ func TestLogger(t *testing.T) {
 	L.LogError("Hello %s!", "error")
 	L.Close()
 
-	L.open(FACILITY, LOGFILE, Warn)
+	L.Open(LOGFILE, Warn)
 	L.LogFatal("Logging at level WARN")
 	L.LogDebug("Hello %s!", "debug")
 	L.LogInfo("Hello %s!", "info")
@@ -43,7 +44,7 @@ func TestLogger(t *testing.T) {
 	L.LogError("Hello %s!", "error")
 	L.Close()
 
-	L.open(FACILITY, LOGFILE, Error)
+	L.Open(LOGFILE, Error)
 	L.LogFatal("Logging at level ERROR")
 	L.LogDebug("Hello %s!", "debug")
 	L.LogInfo("Hello %s!", "info")
@@ -51,7 +52,7 @@ func TestLogger(t *testing.T) {
 	L.LogError("Hello %s!", "error")
 	L.Close()
 
-	L.open(FACILITY, LOGFILE, Fatal)
+	L.Open(LOGFILE, Fatal)
 	L.LogFatal("Logging at level FATAL")
 	L.LogDebug("Hello %s!", "debug")
 	L.LogInfo("Hello %s!", "info")
