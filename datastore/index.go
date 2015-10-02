@@ -2,7 +2,6 @@
 package datastore
 
 import (
-	"os"
 	"strconv"
 	"strings"
 
@@ -49,7 +48,6 @@ func (indexer *MetricsIndexer) run() {
 		// Without Redis client we can't do our job, so log, whine, and crash.
 		config.G.Log.System.LogFatal("Indexer unable to connect to Redis at %v: %v",
 			config.G.Redis.Index.Addr, err)
-		os.Exit(10)
 	}
 
 	defer indexer.rc.Close()

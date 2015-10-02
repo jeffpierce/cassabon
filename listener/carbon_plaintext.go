@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"bytes"
 	"net"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -73,7 +72,6 @@ func (cpl *CarbonPlaintextListener) carbonTCP(hostPort string) {
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
 		config.G.Log.System.LogFatal("Cannot listen for Carbon on TCP: %v", err)
-		os.Exit(3)
 	}
 	defer tcpListener.Close()
 	config.G.Log.System.LogInfo("Listening on %s TCP for Carbon plaintext protocol", tcpListener.Addr().String())
@@ -122,7 +120,6 @@ func (cpl *CarbonPlaintextListener) carbonUDP(hostPort string) {
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
 		config.G.Log.System.LogFatal("Cannot listen for Carbon on UDP: %v", err)
-		os.Exit(3)
 	}
 	defer udpConn.Close()
 	config.G.Log.System.LogInfo("Listening on %s UDP for Carbon plaintext protocol", udpConn.LocalAddr().String())
