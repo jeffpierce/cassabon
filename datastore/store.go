@@ -1,7 +1,10 @@
 package datastore
 
 import (
+	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -84,8 +87,31 @@ func (sm *StoreManager) resetRollupData() {
 	}
 }
 
-func (sm *StoreManager) checkSchema() {
+func (sm *StoreManager) populateSchema() {
 	// Keyspace exists since we have a successful dbClient connection, create tables if they do not exist
+	for _, table := range config.G.RollupTables {
+		var ttlfloat float64
+		ttl := strings.Split(table, "_")[1]
+		ttlfloat, _ = strconv.ParseFloat(ttl, 64)
+		query := fmt.Sprintf(
+			`CREATE TABLE IF NOT EXISTS %s (path text, timestamp timestamp, stat double, PRIMARY KEY (path, timestamp)) 
+			WITH COMPACT STORAGE
+			  AND CLUSTERING ORDER BY (timestamp ASC)
+			  AND compaction = {'class': 'org.apache.cassandra.db.compaction.DateTieredCompactionStrategy'}
+			  AND compression = {'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
+			  AND dclocal_read_repair_chance = 0.1
+			  AND default_time_to_live = %v
+			  AND gc_grace_seconds = 864000
+			  AND memtable_flush_period_in_ms = 0
+			  AND read_repair_chance = 0.0
+			  AND speculative_retry = '99.0PERCENTILE';`, table, int(ttlfloat*1.1))
+
+		config.G.Log.System.LogDebug(query)
+
+		if err := sm.dbClient.Query(query).Exec(); err != nil {
+			config.G.Log.System.LogFatal("Could not configure cassabon keyspace, error is %v", err.Error())
+		}
+	}
 }
 
 func (sm *StoreManager) run() {
@@ -110,6 +136,9 @@ func (sm *StoreManager) run() {
 
 	defer sm.dbClient.Close()
 	config.G.Log.System.LogDebug("StoreManager Cassandra client initialized")
+
+	config.G.Log.System.LogDebug("StoreManager Cassandra Keyspace configuration starting...")
+	sm.populateSchema()
 
 	for {
 		select {
@@ -327,8 +356,8 @@ func (sm *StoreManager) flush(terminating bool) {
 
 // flush persists the accumulated metrics to the database.
 func (sm *StoreManager) write(path string, ts time.Time, value float64, table string) {
-	if err := sm.dbClient.Query("INSERT INTO cassabon.%s (path, timestamp, stat) VALUES (%v, %v, %v)",
-		table, path, ts, value).Exec(); err != nil {
+	query := fmt.Sprintf(`INSERT INTO %s (path, timestamp, stat) VALUES (?, ?, ?)`, table)
+	if err := sm.dbClient.Query(query, path, ts, value).Exec(); err != nil {
 		// Could not write to Cassandra cluster...we should scream loudly about this.  Possibly a failure case?.
 		config.G.Log.System.LogError("Unable to write stats to Cassandra cluster, error is %s", err.Error())
 	}
