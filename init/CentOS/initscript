@@ -1,0 +1,109 @@
+#!/bin/sh
+#
+# cassabon	Start/Stop the Cassabon Carbon metrics server
+#
+# chkconfig: 2345 90 60
+# description: cassabon listens for Carbon metrics, writes them to Cassandra, and serves them
+
+prog="cassabon"
+config=/etc/sysconfig/$prog
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+# Source sysconfig.
+if [ ! -f $config ]; then echo "missing config: $config"; exit 6; fi
+. $config
+
+start() {
+    if [ $UID -ne 0 ] ; then echo "User has insufficient privilege."; exit 4; fi
+    if [ ! -x $EXEC ] ; then echo "Not found or not executable: $EXEC"; exit 5; fi
+    echo -n $"Starting $prog: "
+    if [ -z $USER ]; then
+        daemon /usr/sbin/daemonize -p $PIDFILE $DOPTIONS $EXEC $OPTIONS
+    else
+        daemon /usr/sbin/daemonize -u $USER -p $PIDFILE $DOPTIONS $EXEC $OPTIONS
+    fi
+    retval=$?
+    echo
+}
+
+stop() {
+    if [ $UID -ne 0 ] ; then
+        echo "User has insufficient privilege."
+        exit 4
+    fi
+    echo -n $"Stopping $prog: "
+    if [ -n "`pidofproc -p $PIDFILE $EXEC`" ]; then
+        killproc $EXEC
+        rm -f $PIDFILE
+    else
+        failure $"Stopping $prog"
+    fi
+    retval=$?
+    echo
+}
+
+restart() {
+    rh_status_q && stop
+    start
+}
+
+reload() {
+    echo -n $"Reloading $prog: "
+    if [ -n "`pidofproc -p $PIDFILE $EXEC`" ]; then
+        killproc $EXEC -HUP
+    else
+        failure $"Reloading $prog"
+    fi
+    retval=$?
+    echo
+}
+
+force_reload() {
+    # new configuration takes effect after restart
+    restart
+}
+
+rh_status() {
+    # run checks to determine if the service is running or use generic status
+    status -p $PIDFILE $prog
+}
+
+rh_status_q() {
+    rh_status >/dev/null 2>&1
+}
+
+
+case "$1" in
+    start)
+        rh_status_q && exit 0
+        $1
+        ;;
+    stop)
+        rh_status_q || exit 0
+        $1
+        ;;
+    restart)
+        $1
+        ;;
+    reload)
+        rh_status_q || exit 7
+        $1
+        ;;
+    force-reload)
+        force_reload
+        ;;
+    status)
+        rh_status
+        ;;
+    condrestart|try-restart)
+        rh_status_q || exit 0
+        restart
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload}"
+        exit 2
+esac
+exit $?
+

@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -16,6 +17,14 @@ import (
 
 func main() {
 
+	// Recover cleanly from panics with a message to stderr.
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Fprintf(os.Stderr, "ABORT: %v\n", err)
+			os.Exit(1) // Let OS know we aborted
+		}
+	}()
+
 	// The name of the YAML configuration file.
 	var confFile string
 
@@ -23,9 +32,15 @@ func main() {
 	flag.StringVar(&confFile, "conf", "config/cassabon.yaml", "Location of YAML configuration file.")
 	flag.Parse()
 
+	// Create the loggers.
+	config.G.Log.System = logging.NewLogger("system")
+	config.G.Log.Carbon = logging.NewLogger("carbon")
+	config.G.Log.API = logging.NewLogger("api")
+
 	// Read the configuration file from disk.
-	// This will PANIC ON ERRORS, because the logger is not yet available.
-	config.ReadConfigurationFile(confFile, false)
+	if err := config.ReadConfigurationFile(confFile); err != nil {
+		config.G.Log.System.LogFatal("Unable to load configuration: %v", err)
+	}
 	// Populate the global config with values used only once.
 	config.LoadStartupValues()
 
@@ -33,13 +48,13 @@ func main() {
 	sev, errLogLevel := logging.TextToSeverity(config.G.Log.Loglevel)
 	if config.G.Log.Logdir != "" {
 		logDir, _ := filepath.Abs(config.G.Log.Logdir)
-		config.G.Log.System = logging.NewLogger("system", filepath.Join(logDir, "cassabon.system.log"), sev)
-		config.G.Log.Carbon = logging.NewLogger("carbon", filepath.Join(logDir, "cassabon.carbon.log"), sev)
-		config.G.Log.API = logging.NewLogger("api", filepath.Join(logDir, "cassabon.api.log"), logging.Unclassified)
+		config.G.Log.System.Open(filepath.Join(logDir, "cassabon.system.log"), sev)
+		config.G.Log.Carbon.Open(filepath.Join(logDir, "cassabon.carbon.log"), sev)
+		config.G.Log.API.Open(filepath.Join(logDir, "cassabon.api.log"), logging.Unclassified)
 	} else {
-		config.G.Log.System = logging.NewLogger("system", "", sev)
-		config.G.Log.Carbon = logging.NewLogger("carbon", "", sev)
-		config.G.Log.API = logging.NewLogger("api", "", logging.Unclassified)
+		config.G.Log.System.Open("", sev)
+		config.G.Log.Carbon.Open("", sev)
+		config.G.Log.API.Open("", logging.Unclassified)
 	}
 	defer config.G.Log.System.Close()
 	defer config.G.Log.Carbon.Close()
@@ -106,7 +121,7 @@ func main() {
 		// Re-read the configuration to get any updated values.
 		if configIsStale {
 			config.G.Log.System.LogInfo("Reading configuration file %s", confFile)
-			if err := config.ReadConfigurationFile(confFile, true); err != nil {
+			if err := config.ReadConfigurationFile(confFile); err != nil {
 				config.G.Log.System.LogError("Unable to load configuration: %v", err)
 			} else {
 				config.LoadRefreshableValues()

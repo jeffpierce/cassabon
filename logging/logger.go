@@ -23,11 +23,11 @@ const (
 )
 
 // NewLogger instantiates and initializes a logger for the given facility.
-func NewLogger(logFacility string, logFilename string, logLevel Severity) *FileLogger {
+func NewLogger(logFacility string) *FileLogger {
 
 	if _, ok := loggers[logFacility]; !ok {
 		loggers[logFacility] = new(FileLogger)
-		loggers[logFacility].open(logFacility, logFilename, logLevel)
+		loggers[logFacility].init(logFacility)
 	}
 
 	return loggers[logFacility]
@@ -99,10 +99,29 @@ type FileLogger struct {
 	logger      *log.Logger  // The logger that writes to the file
 }
 
+func (l *FileLogger) init(logFacility string) {
+	l.logFacility = logFacility
+}
+
 // SetLogLevel updates the logging level threshold with imediate effect.
 func (l *FileLogger) SetLogLevel(logLevel Severity) {
 	l.logLevel = logLevel
 	l.LogInfo("Log level set to %s", severityToText(logLevel))
+}
+
+// Open allocates resources for the logger.
+func (l *FileLogger) Open(logFilename string, logLevel Severity) {
+
+	if l.opened {
+		return
+	}
+
+	l.logFilename = logFilename
+	l.logLevel = logLevel
+
+	// Open the logfile.
+	l.closeAndOrOpen(1)
+	l.opened = true
 }
 
 // Close releases all resources associated with the logger.
@@ -165,22 +184,7 @@ func (l *FileLogger) LogFatal(format string, a ...interface{}) {
 		defer l.m.RUnlock()
 		l.emit(Fatal, format, a...)
 	}
-}
-
-// open allocates resources for the logger.
-func (l *FileLogger) open(logFacility string, logFilename string, logLevel Severity) {
-
-	if l.opened {
-		return
-	}
-
-	l.logFacility = logFacility
-	l.logFilename = logFilename
-	l.logLevel = logLevel
-
-	// Open the logfile.
-	l.closeAndOrOpen(1)
-	l.opened = true
+	panic(fmt.Errorf(format, a...))
 }
 
 // reopen closes and re-opens the log file to support log rotation.
@@ -205,14 +209,9 @@ func (l *FileLogger) openLogfile() *os.File {
 			// DO NOT call the public Log() method, you will cause a deadlock.
 			l.emit(Fatal, "Unable to reopen logfile '%v'. Error: '%v'", l.logFilename, err)
 			l.logFile.Close()
-		} else {
-			// The startup case.
-			// Warning: when started as a daemon, this may go to /dev/null.
-			fmt.Printf("[-] ["+severityText[Fatal]+"] Unable to open logfile '%v'. Error: '%v'\n", l.logFilename, err)
 		}
-		// Inability to log is a fatal error; die with a non-zero exit code.
-		// We do not run blind.
-		os.Exit(1)
+		// Inability to log is a fatal error. We do not run blind.
+		panic(fmt.Errorf("Unable to (re)open logfile '%v'. Error: '%v'", l.logFilename, err))
 	}
 
 	return fp

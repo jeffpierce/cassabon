@@ -1,0 +1,10 @@
+/var/log/cassabon/cassabon.api.log /var/log/cassabon/cassabon.carbon.log /var/log/cassabon/cassabon.system.log {
+    weekly
+    missingok
+    notifempty
+    rotate 4
+    size 100m
+    postrotate
+        /bin/kill -s -HUP `cat /var/run/cassabon.pid 2> /dev/null` 2> /dev/null || true
+    endscript
+}

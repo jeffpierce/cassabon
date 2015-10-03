@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -84,29 +83,15 @@ type StatsdSettings struct {
 var rawCassabonConfig *CassabonConfig
 
 // ReadConfigurationFile reads the contents of the specified file from disk, and unmarshals it.
-// First time through we have no logger, so we can't log warnings or errors. Panic instead.
-func ReadConfigurationFile(configFile string, haveLogger bool) error {
+func ReadConfigurationFile(configFile string) error {
 
 	// Read the configuration file.
 	yamlConfig, err := ioutil.ReadFile(configFile)
-	if err != nil {
-		if haveLogger {
-			return err
-		} else {
-			panic(err)
-		}
+	if err == nil {
+		// Unmarshal config file contents into raw config struct.
+		err = yaml.Unmarshal(yamlConfig, &rawCassabonConfig)
 	}
-
-	// Unmarshal config file contents into raw config struct.
-	err = yaml.Unmarshal(yamlConfig, &rawCassabonConfig)
-	if err != nil {
-		if haveLogger {
-			return err
-		} else {
-			panic(err)
-		}
-	}
-	return nil
+	return err
 }
 
 // LoadStartupValues populates the global config object with values that are used only once.
@@ -202,7 +187,6 @@ func LoadRefreshableValues() {
 	// Ensure addresses are valid, and that the local address:port is in the peer list.
 	if err := ValidatePeerList(G.Carbon.Listen, G.Carbon.Peers); err != nil {
 		G.Log.System.LogFatal(err.Error())
-		os.Exit(1)
 	}
 
 	// Copy in and sanitize the Carbon TCP listener timeout.
