@@ -315,8 +315,21 @@ func LoadRollups() {
 				continue
 			}
 
+			// Record this table name in the master list of table names.
+			table := fmt.Sprintf("rollup_%09d", uint64(retention.Seconds()))
+			found := false
+			for _, v := range G.RollupTables {
+				if table == v {
+					found = true
+					break
+				}
+			}
+			if !found {
+				G.RollupTables = append(G.RollupTables, table)
+			}
+
 			// Append to the rollups for this expression.
-			rd.Windows = append(rd.Windows, RollupWindow{window, retention})
+			rd.Windows = append(rd.Windows, RollupWindow{window, retention, table})
 		}
 
 		// If any of the rollup window definitions were valid, add expression to the list.
@@ -350,4 +363,7 @@ func LoadRollups() {
 
 	// Sort the path expressions into priority order.
 	sort.Sort(ByPriority(G.RollupPriority))
+
+	// Sort the table names.
+	sort.Strings(G.RollupTables)
 }

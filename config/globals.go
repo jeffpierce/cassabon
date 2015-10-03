@@ -38,6 +38,7 @@ const ROLLUP_CATCHALL = "default"
 type RollupWindow struct {
 	Window    time.Duration
 	Retention time.Duration
+	Table     string // The Cassandra table to which this window is written
 }
 
 // RollupDef is the definition of how to process a path expression.
@@ -118,4 +119,5 @@ type Globals struct {
 	// Configuration of data rollups.
 	RollupPriority []string             // First matched expression wins
 	Rollup         map[string]RollupDef // Rollup processing definitions by path expression
+	RollupTables   []string             // The Cassandra table names derived from extant durations
 }
