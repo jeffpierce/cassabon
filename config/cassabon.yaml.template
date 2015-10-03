@@ -1,0 +1,109 @@
+# Cassabon configuration
+#
+# Configuration values that are constant for the life of the daemon
+#
+logging:
+    logdir: ""
+    loglevel: "debug"    # The exception: will be re-read on SIGHUP
+statsd:
+    host: "127.0.0.1"
+    port: 8125
+    events:
+        receiveok:
+            key: "carbon.received.success"
+            samplerate: 1.0
+        receivefail:
+            key: "carbon.received.failure"
+            samplerate: 1.0
+channels:
+    datastorechanlen: 500
+    indexstorechanlen: 10
+    gopherchanlen: 100
+#
+# Configuration values that will be re-processed by daemon on SIGHUP
+#
+carbon:
+    # If listen address or peer list changes, all rollups will be flushed
+    listen: "127.0.0.1:2003"
+    protocol: "both"
+    parameters:
+        tcptimeout: 5
+        udptimeout: 5
+    peers:
+        - "127.0.0.1:2003"
+api:
+    listen: "127.0.0.1:8080"
+    healthcheckfile: "config/healthcheckfile"
+cassandra:
+    hosts:
+        - "127.0.0.1"
+    port: 9042
+redis:
+    index:
+        addr:
+            - "127.0.0.1:6379"
+        db: 5
+        pwd: ""
+        sentinel: false
+        master: ""
+    queue:
+        addr:
+            - "127.0.0.1:6379"
+        db: 6
+        pwd: ""
+        sentinel: false
+        master: ""
+#
+# Rollups could be re-processed when all rollup accumulators have been flushed,
+# but this is not implemented. Full restart is required when rollups change.
+#
+rollups:
+  ^foo.*:
+    retention:
+      - 6s:30m
+      - 1m:30d
+      - 1h:1y
+    aggregation: sum
+  ^foo.*.average:
+    retention:
+      - 6s:30m
+      - 1m:30d
+    aggregation: average
+  ^foo.*.max:
+    retention:
+      - 6s:30m
+      - 1m:30d
+    aggregation: max
+  ^foo.*.min:
+    retention:
+      - 6s:30m
+      - 1m:30d
+    aggregation: min
+  ^foo.*.sum:
+    retention:
+      - 6s:30m
+      - 1m:30d
+    aggregation: sum
+  ^bar.*:
+    retention:
+      - 10s:1h
+      - 1m:30d
+    aggregation: max
+  ^bar.baz.*:
+    retention:
+      - 10s:1h
+      - 1m:30d
+    aggregation: min
+  ^bar.quux.*:
+    retention:
+      - 10s:1h
+      - 1m:30d
+    aggregation: max
+  default:
+    # Any metric path that matches none of the above expressions will be rolled
+    # up according to these defaults
+    retention:
+      - 15s:1d
+      - 1h:30d
+      - 1h:3w
+    aggregation: average
