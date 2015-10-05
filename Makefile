@@ -3,16 +3,13 @@
 TARGET = cassabon
 
 BUILDDIR = build
-RELEASE = $(shell git rev-parse HEAD)
-DESTDIR = $(BUILDDIR)/$(RELEASE)
-TARBALL = $(BUILDDIR)/$(TARGET)-$(RELEASE).tar.gz
 
 SOURCES = $(TARGET).go api/*go config/*go datastore/*go listener/*go logging/*go middleware/*go
 TESTS = . ./api ./config ./datastore ./listener ./logging ./middleware ./pearson
 
 UNAME = $(shell uname)
 
-all: $(DESTDIR) $(TARBALL)
+all: $(BUILDDIR)/$(TARGET)
 
 clean:
 	rm -rf $(BUILDDIR)
@@ -23,20 +20,10 @@ fetch:
 test:
 	go test -race $(TESTS)
 
-build: $(DESTDIR)/$(TARGET)
+build: $(BUILDDIR)/$(TARGET)
 
-$(DESTDIR):
-	mkdir -p $(DESTDIR)
+$(BUILDDIR):
+	mkdir -p $(BUILDDIR)
 
-$(DESTDIR)/$(TARGET): $(SOURCES)
-	go build -race -o $(DESTDIR)/$(TARGET) $(TARGET).go
-
-$(TARBALL): $(DESTDIR)/$(TARGET)
-	tar czf $(TARBALL) -C $(DESTDIR) .
-
-upload: $(TARBALL)
-ifeq ($(UNAME), Darwin)
-	$(error $(UNAME) binaries are not valid in production; refusing to upload to S3)
-else
-	$(error Upload to S3 not implemented)
-endif
+$(BUILDDIR)/$(TARGET): $(BUILDDIR) $(SOURCES)
+	go build -race -o $(BUILDDIR)/$(TARGET) $(TARGET).go
