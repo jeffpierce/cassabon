@@ -2,7 +2,6 @@ package datastore
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
