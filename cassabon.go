@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,12 +17,7 @@ import (
 func main() {
 
 	// Recover cleanly from panics with a message to stderr.
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Fprintf(os.Stderr, "ABORT: %v\n", err)
-			os.Exit(1) // Let OS know we aborted
-		}
-	}()
+	defer config.G.OnPanic()
 
 	// The name of the YAML configuration file.
 	var confFile string

@@ -25,6 +25,8 @@ func (indexer *MetricsIndexer) Start() {
 
 func (indexer *MetricsIndexer) run() {
 
+	defer config.G.OnPanic()
+
 	// Initialize Redis client pool.
 	var err error
 	if config.G.Redis.Index.Sentinel {

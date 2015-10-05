@@ -115,6 +115,8 @@ func (sm *StoreManager) populateSchema() {
 
 func (sm *StoreManager) run() {
 
+	defer config.G.OnPanic()
+
 	// Perform first-time initialization of rollup data accumulation structures.
 	sm.resetRollupData()
 

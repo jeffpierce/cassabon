@@ -34,6 +34,8 @@ func (gopher *StatPathGopher) Start() {
 
 func (gopher *StatPathGopher) run() {
 
+	defer config.G.OnPanic()
+
 	// Initalize Redis client pool.
 	var err error
 	if config.G.Redis.Index.Sentinel {

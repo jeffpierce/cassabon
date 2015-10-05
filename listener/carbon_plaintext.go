@@ -66,6 +66,8 @@ func (cpl *CarbonPlaintextListener) Start() {
 // carbonTCP listens for incoming Carbon TCP traffic and dispatches it.
 func (cpl *CarbonPlaintextListener) carbonTCP(hostPort string) {
 
+	defer config.G.OnPanic()
+
 	// Resolve the address:port, and start listening for TCP connections.
 	tcpaddr, _ := net.ResolveTCPAddr("tcp4", hostPort)
 	tcpListener, err := net.ListenTCP("tcp4", tcpaddr)
@@ -113,6 +115,8 @@ func (cpl *CarbonPlaintextListener) getTCPData(conn net.Conn) {
 
 // carbonUDP listens for incoming Carbon UDP traffic and dispatches it.
 func (cpl *CarbonPlaintextListener) carbonUDP(hostPort string) {
+
+	defer config.G.OnPanic()
 
 	// Resolve the address:port, and start listening for UDP connections.
 	udpaddr, _ := net.ResolveUDPAddr("udp4", hostPort)

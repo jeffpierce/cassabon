@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"os"
 	"regexp"
 	"sync"
 	"time"
@@ -120,4 +122,11 @@ type Globals struct {
 	RollupPriority []string             // First matched expression wins
 	Rollup         map[string]RollupDef // Rollup processing definitions by path expression
 	RollupTables   []string             // The Cassandra table names derived from extant durations
+}
+
+func (g *Globals) OnPanic() {
+	if err := recover(); err != nil {
+		fmt.Fprintf(os.Stderr, "ABORT: %v\n", err)
+		os.Exit(1) // Let OS know we aborted
+	}
 }
