@@ -9,7 +9,7 @@ TESTS = . ./api ./config ./datastore ./listener ./logging ./middleware ./pearson
 
 UNAME = $(shell uname)
 
-all: $(BUILDDIR)/$(TARGET)
+all: build
 
 clean:
 	rm -rf $(BUILDDIR)
@@ -25,5 +25,5 @@ build: $(BUILDDIR)/$(TARGET)
 $(BUILDDIR):
 	mkdir -p $(BUILDDIR)
 
-$(BUILDDIR)/$(TARGET): $(BUILDDIR) $(SOURCES)
+$(BUILDDIR)/$(TARGET): $(SOURCES)
 	go build -race -o $(BUILDDIR)/$(TARGET) $(TARGET).go
