@@ -7,8 +7,8 @@ RELEASE = $(shell git rev-parse HEAD)
 DESTDIR = $(BUILDDIR)/$(RELEASE)
 TARBALL = $(BUILDDIR)/$(TARGET)-$(RELEASE).tar.gz
 
-SOURCES = $(TARGET).go api/*go config/*go datastore/*go engine/*go listener/*go logging/*go middleware/*go
-TESTS = . ./api ./config ./datastore ./engine ./listener ./logging ./middleware ./pearson
+SOURCES = $(TARGET).go api/*go config/*go datastore/*go listener/*go logging/*go middleware/*go
+TESTS = . ./api ./config ./datastore ./listener ./logging ./middleware ./pearson
 
 UNAME = $(shell uname)
 
