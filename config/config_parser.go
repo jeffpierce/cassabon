@@ -219,6 +219,9 @@ func LoadRefreshableValues() {
 
 	// Copy in the Cassandra database connection values.
 	G.Cassandra = rawCassabonConfig.Cassandra
+	if G.Cassandra.Keyspace == "" {
+		G.Cassandra.Keyspace = "cassabon"
+	}
 
 	// Copy in the Redis database connection values.
 	G.Redis.Index = rawCassabonConfig.Redis.Index
