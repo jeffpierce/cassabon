@@ -109,7 +109,13 @@ func (sm *StoreManager) populateSchema() {
 	}
 
 	// Create tables if they do not exist
+	ksmd, _ := sm.dbClient.KeyspaceMetadata(config.G.Cassandra.Keyspace)
 	for _, table := range config.G.RollupTables {
+		if ksmd != nil {
+			if _, found := ksmd.Tables[table]; found {
+				continue
+			}
+		}
 		var ttlfloat float64
 		ttl := strings.Split(table, "_")[1]
 		ttlfloat, _ = strconv.ParseFloat(ttl, 64)
@@ -129,6 +135,7 @@ func (sm *StoreManager) populateSchema() {
 			config.G.Cassandra.Keyspace, table, int(ttlfloat*1.1))
 
 		config.G.Log.System.LogDebug(query)
+		config.G.Log.System.LogInfo("Creating table %q", table)
 
 		if err := sm.dbClient.Query(query).Exec(); err != nil {
 			config.G.Log.System.LogFatal("Table %q creation failed: %v", table, err)
