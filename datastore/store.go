@@ -294,18 +294,9 @@ func (sm *StoreManager) flush(terminating bool) {
 				// Iterate over all the paths that match the current expression.
 				for path, rollup := range rl.path {
 
-					// Has any data accumulated while the window was open?
 					if rollup.count[i] > 0 {
-
-						config.G.Log.System.LogInfo("Write expr=%q win=%v ret=%v ts=%v path=%s value=%.4f",
-							expr,
-							sm.rollup[expr].Windows[i].Window,
-							sm.rollup[expr].Windows[i].Retention,
-							statTime.Format("15:04:05.000"), // Window end time
-							path,
-							rollup.value[i])
-
-						sm.write(path, statTime, rollup.value[i], sm.rollup[expr].Windows[i].Table)
+						// Data has accumulated while this window was open; write it.
+						sm.write(expr, sm.rollup[expr].Windows[i], path, statTime, rollup.value[i])
 					}
 
 					// Ensure the bucket is empty for the next open window.
@@ -346,8 +337,12 @@ func (sm *StoreManager) flush(terminating bool) {
 }
 
 // flush persists the accumulated metrics to the database.
-func (sm *StoreManager) write(path string, ts time.Time, value float64, table string) {
-	query := fmt.Sprintf(`INSERT INTO cassabon.%s (path, timestamp, stat) VALUES (?, ?, ?)`, table)
+func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, ts time.Time, value float64) {
+
+	config.G.Log.System.LogInfo("Write expr=%q cf=%s win=%v ret=%v ts=%v path=%s value=%.4f",
+		expr, w.Table, w.Window, w.Retention, ts.Format("15:04:05.000"), path, value)
+
+	query := fmt.Sprintf(`INSERT INTO cassabon.%s (path, timestamp, stat) VALUES (?, ?, ?)`, w.Table)
 	if err := sm.dbClient.Query(query, path, ts, value).Exec(); err != nil {
 		// Could not write to Cassandra cluster...we should scream loudly about this.  Possibly a failure case?.
 		config.G.Log.System.LogError("Cassandra write error: %v", err)
