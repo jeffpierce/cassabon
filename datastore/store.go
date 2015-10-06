@@ -86,29 +86,43 @@ func (sm *StoreManager) resetRollupData() {
 	}
 }
 
+// populateSchema ensures that all necessary Cassandra setup has been completed.
 func (sm *StoreManager) populateSchema() {
-	// Keyspace exists since we have a successful dbClient connection, create tables if they do not exist
+
+	// Create the cassabon keyspace if it does not exist.
+	conn := sm.dbClient.Pool.Pick(sm.dbClient.Query(""))
+	if err := conn.UseKeyspace("cassabon"); err != nil {
+		// Note: "USE <keyspace>" isn't allowed, and conn.UseKeyspace() isn't sticky.
+		config.G.Log.System.LogInfo("Keyspace not found: %v", err)
+		query := "CREATE KEYSPACE cassabon WITH replication = {'class':'SimpleStrategy', 'replication_factor':1}"
+		if err := sm.dbClient.Query(query).Exec(); err != nil {
+			config.G.Log.System.LogFatal("Could not create cassabon keyspace: %v", err)
+		}
+	}
+
+	// Create tables if they do not exist
 	for _, table := range config.G.RollupTables {
 		var ttlfloat float64
 		ttl := strings.Split(table, "_")[1]
 		ttlfloat, _ = strconv.ParseFloat(ttl, 64)
 		query := fmt.Sprintf(
-			`CREATE TABLE IF NOT EXISTS %s (path text, timestamp timestamp, stat double, PRIMARY KEY (path, timestamp)) 
-			WITH COMPACT STORAGE
-			  AND CLUSTERING ORDER BY (timestamp ASC)
-			  AND compaction = {'class': 'org.apache.cassandra.db.compaction.DateTieredCompactionStrategy'}
-			  AND compression = {'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
-			  AND dclocal_read_repair_chance = 0.1
-			  AND default_time_to_live = %v
-			  AND gc_grace_seconds = 864000
-			  AND memtable_flush_period_in_ms = 0
-			  AND read_repair_chance = 0.0
-			  AND speculative_retry = '99.0PERCENTILE';`, table, int(ttlfloat*1.1))
+			`CREATE TABLE IF NOT EXISTS cassabon.%s
+                (path text, timestamp timestamp, stat double, PRIMARY KEY (path, timestamp))
+            WITH COMPACT STORAGE
+                AND CLUSTERING ORDER BY (timestamp ASC)
+                AND compaction = {'class': 'org.apache.cassandra.db.compaction.DateTieredCompactionStrategy'}
+                AND compression = {'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
+                AND dclocal_read_repair_chance = 0.1
+                AND default_time_to_live = %v
+                AND gc_grace_seconds = 864000
+                AND memtable_flush_period_in_ms = 0
+                AND read_repair_chance = 0.0
+                AND speculative_retry = '99.0PERCENTILE';`, table, int(ttlfloat*1.1))
 
 		config.G.Log.System.LogDebug(query)
 
 		if err := sm.dbClient.Query(query).Exec(); err != nil {
-			config.G.Log.System.LogFatal("Could not configure cassabon keyspace, error is %v", err.Error())
+			config.G.Log.System.LogFatal("Table %q creation failed: %v", table, err)
 		}
 	}
 }
@@ -356,9 +370,9 @@ func (sm *StoreManager) flush(terminating bool) {
 
 // flush persists the accumulated metrics to the database.
 func (sm *StoreManager) write(path string, ts time.Time, value float64, table string) {
-	query := fmt.Sprintf(`INSERT INTO %s (path, timestamp, stat) VALUES (?, ?, ?)`, table)
+	query := fmt.Sprintf(`INSERT INTO cassabon.%s (path, timestamp, stat) VALUES (?, ?, ?)`, table)
 	if err := sm.dbClient.Query(query, path, ts, value).Exec(); err != nil {
 		// Could not write to Cassandra cluster...we should scream loudly about this.  Possibly a failure case?.
-		config.G.Log.System.LogError("Unable to write stats to Cassandra cluster, error is %s", err.Error())
+		config.G.Log.System.LogError("Cassandra write error: %v", err)
 	}
 }
