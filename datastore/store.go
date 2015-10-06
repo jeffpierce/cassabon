@@ -89,15 +89,23 @@ func (sm *StoreManager) resetRollupData() {
 // populateSchema ensures that all necessary Cassandra setup has been completed.
 func (sm *StoreManager) populateSchema() {
 
-	// Create the cassabon keyspace if it does not exist.
+	// Create the keyspace if it does not exist.
 	conn := sm.dbClient.Pool.Pick(sm.dbClient.Query(""))
-	if err := conn.UseKeyspace("cassabon"); err != nil {
+	if err := conn.UseKeyspace(config.G.Cassandra.Keyspace); err != nil {
 		// Note: "USE <keyspace>" isn't allowed, and conn.UseKeyspace() isn't sticky.
 		config.G.Log.System.LogInfo("Keyspace not found: %v", err)
-		query := "CREATE KEYSPACE cassabon WITH replication = {'class':'SimpleStrategy', 'replication_factor':1}"
-		if err := sm.dbClient.Query(query).Exec(); err != nil {
-			config.G.Log.System.LogFatal("Could not create cassabon keyspace: %v", err)
+		var options string
+		if len(config.G.Cassandra.CreateOpts) > 0 {
+			options = "," + config.G.Cassandra.CreateOpts
 		}
+		query := fmt.Sprintf(
+			"CREATE KEYSPACE %s WITH replication = {'class':'%s'%s}",
+			config.G.Cassandra.Keyspace, config.G.Cassandra.Strategy, options)
+		config.G.Log.System.LogDebug(query)
+		if err := sm.dbClient.Query(query).Exec(); err != nil {
+			config.G.Log.System.LogFatal("Could not create keyspace: %v", err)
+		}
+		config.G.Log.System.LogInfo("Keyspace %q created", config.G.Cassandra.Keyspace)
 	}
 
 	// Create tables if they do not exist
@@ -106,7 +114,7 @@ func (sm *StoreManager) populateSchema() {
 		ttl := strings.Split(table, "_")[1]
 		ttlfloat, _ = strconv.ParseFloat(ttl, 64)
 		query := fmt.Sprintf(
-			`CREATE TABLE IF NOT EXISTS cassabon.%s
+			`CREATE TABLE IF NOT EXISTS %s.%s
                 (path text, timestamp timestamp, stat double, PRIMARY KEY (path, timestamp))
             WITH COMPACT STORAGE
                 AND CLUSTERING ORDER BY (timestamp ASC)
@@ -117,7 +125,8 @@ func (sm *StoreManager) populateSchema() {
                 AND gc_grace_seconds = 864000
                 AND memtable_flush_period_in_ms = 0
                 AND read_repair_chance = 0.0
-                AND speculative_retry = '99.0PERCENTILE';`, table, int(ttlfloat*1.1))
+                AND speculative_retry = '99.0PERCENTILE';`,
+			config.G.Cassandra.Keyspace, table, int(ttlfloat*1.1))
 
 		config.G.Log.System.LogDebug(query)
 
@@ -140,7 +149,7 @@ func (sm *StoreManager) run() {
 	sm.dbClient, err = middleware.CassandraSession(
 		config.G.Cassandra.Hosts,
 		config.G.Cassandra.Port,
-		"cassabon",
+		"",
 	)
 	if err != nil {
 		// Without Cassandra client we can't do our job, so log, whine, and crash.
@@ -342,7 +351,10 @@ func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, t
 	config.G.Log.Carbon.LogInfo("match=%q tbl=%s ts=%v path=%s val=%.4f win=%v ret=%v ",
 		expr, w.Table, ts.Format("15:04:05.000"), path, value, w.Window, w.Retention)
 
-	query := fmt.Sprintf(`INSERT INTO cassabon.%s (path, timestamp, stat) VALUES (?, ?, ?)`, w.Table)
+	query := fmt.Sprintf(
+		`INSERT INTO %s.%s (path, timestamp, stat) VALUES (?, ?, ?)`,
+		config.G.Cassandra.Keyspace, w.Table)
+
 	if err := sm.dbClient.Query(query, path, ts, value).Exec(); err != nil {
 		// Could not write to Cassandra cluster...we should scream loudly about this.  Possibly a failure case?.
 		config.G.Log.System.LogError("Cassandra write error: %v", err)

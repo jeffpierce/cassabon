@@ -38,6 +38,9 @@ cassandra:
     hosts:
         - "127.0.0.1"
     port: 9042
+    keyspace: "cassabon_dev"
+    strategy: "SimpleStrategy"
+    createopts: "'replication_factor':1"
 redis:
     index:
         addr:

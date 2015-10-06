@@ -17,6 +17,7 @@ func CassandraSession(chosts []string, cport string, ckeyspace string) (*gocql.S
 	clusterCfg := gocql.NewCluster(chosts...)
 	clusterCfg.Port = int(port)
 	clusterCfg.DiscoverHosts = true
+	clusterCfg.Keyspace = ckeyspace
 
 	// Create session.
 	return clusterCfg.CreateSession()

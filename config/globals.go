@@ -108,10 +108,7 @@ type Globals struct {
 		HealthCheckFile string // Health check file.
 	}
 
-	Cassandra struct {
-		Hosts []string // List of hostnames or IP addresses of Cassandra ring
-		Port  string   // Cassandra port
-	}
+	Cassandra CassandraSettings
 
 	Redis struct {
 		Index RedisSettings // Settings for Redis Index

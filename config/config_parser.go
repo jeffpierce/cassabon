@@ -38,11 +38,8 @@ type CassabonConfig struct {
 		Listen          string // HTTP API listens on this address:port
 		HealthCheckFile string // Location of healthcheck file.
 	}
-	Cassandra struct {
-		Hosts []string // List of hostnames or IP addresses of Cassandra ring
-		Port  string   // Cassandra port
-	}
-	Redis struct {
+	Cassandra CassandraSettings
+	Redis     struct {
 		Index RedisSettings // Settings for Redis Index
 		Queue RedisSettings // Settings for Redis Queue
 	}
@@ -53,6 +50,15 @@ type CassabonConfig struct {
 type RollupSettings struct {
 	Retention   []string
 	Aggregation string
+}
+
+// Cassandra connection and schema information
+type CassandraSettings struct {
+	Hosts      []string // List of hostnames or IP addresses of Cassandra ring
+	Port       string   // Cassandra port
+	Keyspace   string   // Name of the Cassandra keyspace
+	Strategy   string   // Replication class of the keyspace
+	CreateOpts string   // CQL text for the strategy options
 }
 
 // Redis struct for redis connection information
