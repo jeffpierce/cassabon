@@ -1,4 +1,4 @@
-/var/log/cassabon/cassabon.api.log /var/log/cassabon/cassabon.carbon.log /var/log/cassabon/cassabon.system.log {
+/var/log/cassabon/api.log /var/log/cassabon/carbon.log /var/log/cassabon/system.log {
     weekly
     missingok
     notifempty
