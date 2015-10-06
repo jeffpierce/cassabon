@@ -43,11 +43,11 @@ func main() {
 	if config.G.Log.Logdir != "" {
 		logDir, _ := filepath.Abs(config.G.Log.Logdir)
 		config.G.Log.System.Open(filepath.Join(logDir, "cassabon.system.log"), sev)
-		config.G.Log.Carbon.Open(filepath.Join(logDir, "cassabon.carbon.log"), sev)
+		config.G.Log.Carbon.Open(filepath.Join(logDir, "cassabon.carbon.log"), logging.Unclassified)
 		config.G.Log.API.Open(filepath.Join(logDir, "cassabon.api.log"), logging.Unclassified)
 	} else {
 		config.G.Log.System.Open("", sev)
-		config.G.Log.Carbon.Open("", sev)
+		config.G.Log.Carbon.Open("", logging.Unclassified)
 		config.G.Log.API.Open("", logging.Unclassified)
 	}
 	defer config.G.Log.System.Close()

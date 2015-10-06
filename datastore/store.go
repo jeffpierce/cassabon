@@ -339,8 +339,8 @@ func (sm *StoreManager) flush(terminating bool) {
 // flush persists the accumulated metrics to the database.
 func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, ts time.Time, value float64) {
 
-	config.G.Log.System.LogInfo("Write expr=%q cf=%s win=%v ret=%v ts=%v path=%s value=%.4f",
-		expr, w.Table, w.Window, w.Retention, ts.Format("15:04:05.000"), path, value)
+	config.G.Log.Carbon.LogInfo("match=%q tbl=%s ts=%v path=%s val=%.4f win=%v ret=%v ",
+		expr, w.Table, ts.Format("15:04:05.000"), path, value, w.Window, w.Retention)
 
 	query := fmt.Sprintf(`INSERT INTO cassabon.%s (path, timestamp, stat) VALUES (?, ?, ?)`, w.Table)
 	if err := sm.dbClient.Query(query, path, ts, value).Exec(); err != nil {
