@@ -38,21 +38,17 @@ cassandra:
     hosts:
         - "127.0.0.1"
     port: 9042
+    keyspace: "cassabon_dev"
+    strategy: "SimpleStrategy"
+    createopts: "'replication_factor':1"
 redis:
-    index:
-        addr:
-            - "127.0.0.1:6379"
-        db: 5
-        pwd: ""
-        sentinel: false
-        master: ""
-    queue:
-        addr:
-            - "127.0.0.1:6379"
-        db: 6
-        pwd: ""
-        sentinel: false
-        master: ""
+    addr:
+        - "127.0.0.1:6379"
+    db: 5
+    pwd: ""
+    pathkeyname: "cassabon_dev"
+    sentinel: false
+    master: ""
 #
 # Rollups could be re-processed when all rollup accumulators have been flushed,
 # but this is not implemented. Full restart is required when rollups change.

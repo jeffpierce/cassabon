@@ -38,27 +38,27 @@ func (gopher *StatPathGopher) run() {
 
 	// Initalize Redis client pool.
 	var err error
-	if config.G.Redis.Index.Sentinel {
+	if config.G.Redis.Sentinel {
 		config.G.Log.System.LogDebug("Gopher initializing Redis client (Sentinel)")
 		gopher.rc, err = middleware.RedisFailoverClient(
-			config.G.Redis.Index.Addr,
-			config.G.Redis.Index.Pwd,
-			config.G.Redis.Index.Master,
-			config.G.Redis.Index.DB,
+			config.G.Redis.Addr,
+			config.G.Redis.Pwd,
+			config.G.Redis.Master,
+			config.G.Redis.DB,
 		)
 	} else {
 		config.G.Log.System.LogDebug("Gopher initializing Redis client")
 		gopher.rc, err = middleware.RedisClient(
-			config.G.Redis.Index.Addr,
-			config.G.Redis.Index.Pwd,
-			config.G.Redis.Index.DB,
+			config.G.Redis.Addr,
+			config.G.Redis.Pwd,
+			config.G.Redis.DB,
 		)
 	}
 
 	if err != nil {
 		// Without Redis client we can't do our job, so log, whine, and crash.
 		config.G.Log.System.LogFatal("Gopher unable to connect to Redis at %v: %v",
-			config.G.Redis.Index.Addr, err)
+			config.G.Redis.Addr, err)
 	}
 
 	defer gopher.rc.Close()
@@ -117,12 +117,12 @@ func (gopher *StatPathGopher) getMax(s string) string {
 
 func (gopher *StatPathGopher) simpleWild(q string, l int) []byte {
 	// Queries with an ending wild card only are easy, as the response from
-	// ZRANGEBYLEX cassabon [bigE_len:path [bigE_len:path\xff is the answer.
+	// ZRANGEBYLEX <key> [bigE_len:path [bigE_len:path\xff is the answer.
 	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", q}, "")
 	queryStringMax := gopher.getMax(queryString)
 
 	// Perform the query.
-	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeByScore{
+	resp, err := gopher.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
 		queryString, queryStringMax, 0, 0,
 	}).Result()
 
@@ -141,7 +141,7 @@ func (gopher *StatPathGopher) noWild(q string, l int) []byte {
 	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", q, ":"}, "")
 	queryStringMax := gopher.getMax(queryString)
 
-	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeByScore{
+	resp, err := gopher.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
 		queryString, queryStringMax, 0, 0,
 	}).Result()
 
@@ -165,7 +165,7 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) []byte {
 	config.G.Log.System.LogDebug(
 		"complexWild querying redis with %s, %s as range", queryString, queryStringMax)
 
-	resp, err := gopher.rc.ZRangeByLex("cassabon", redis.ZRangeByScore{
+	resp, err := gopher.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
 		queryString, queryStringMax, 0, 0,
 	}).Result()
 

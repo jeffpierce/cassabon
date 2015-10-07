@@ -38,15 +38,9 @@ type CassabonConfig struct {
 		Listen          string // HTTP API listens on this address:port
 		HealthCheckFile string // Location of healthcheck file.
 	}
-	Cassandra struct {
-		Hosts []string // List of hostnames or IP addresses of Cassandra ring
-		Port  string   // Cassandra port
-	}
-	Redis struct {
-		Index RedisSettings // Settings for Redis Index
-		Queue RedisSettings // Settings for Redis Queue
-	}
-	Rollups map[string]RollupSettings // Map of regex and rollups
+	Cassandra CassandraSettings
+	Redis     RedisSettings
+	Rollups   map[string]RollupSettings // Map of regex and rollups
 }
 
 // Definition of each rollup
@@ -55,13 +49,23 @@ type RollupSettings struct {
 	Aggregation string
 }
 
+// Cassandra connection and schema information
+type CassandraSettings struct {
+	Hosts      []string // List of hostnames or IP addresses of Cassandra ring
+	Port       string   // Cassandra port
+	Keyspace   string   // Name of the Cassandra keyspace
+	Strategy   string   // Replication class of the keyspace
+	CreateOpts string   // CQL text for the strategy options
+}
+
 // Redis struct for redis connection information
 type RedisSettings struct {
-	Sentinel bool     // True if sentinel, false if standalone.
-	Addr     []string // List of addresses in host:port format
-	DB       int64    // Redis DB number for the index.
-	Pwd      string   // Password for Redis.
-	Master   string   // Master config name for sentinel settings.
+	Addr        []string // List of addresses in host:port format
+	DB          int64    // Redis DB number for the index.
+	Pwd         string   // Password for Redis.
+	PathKeyname string   // Name of the key under which paths are indexed
+	Sentinel    bool     // True if sentinel, false if standalone.
+	Master      string   // Master config name for sentinel settings.
 }
 
 type StatsdSettings struct {
@@ -213,10 +217,15 @@ func LoadRefreshableValues() {
 
 	// Copy in the Cassandra database connection values.
 	G.Cassandra = rawCassabonConfig.Cassandra
+	if G.Cassandra.Keyspace == "" {
+		G.Cassandra.Keyspace = "cassabon"
+	}
 
 	// Copy in the Redis database connection values.
-	G.Redis.Index = rawCassabonConfig.Redis.Index
-	G.Redis.Queue = rawCassabonConfig.Redis.Queue
+	G.Redis = rawCassabonConfig.Redis
+	if G.Redis.PathKeyname == "" {
+		G.Redis.PathKeyname = "cassabon"
+	}
 }
 
 // LoadRollups populates the global config object with the rollup definitions,

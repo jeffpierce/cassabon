@@ -86,29 +86,59 @@ func (sm *StoreManager) resetRollupData() {
 	}
 }
 
+// populateSchema ensures that all necessary Cassandra setup has been completed.
 func (sm *StoreManager) populateSchema() {
-	// Keyspace exists since we have a successful dbClient connection, create tables if they do not exist
+
+	// Create the keyspace if it does not exist.
+	conn := sm.dbClient.Pool.Pick(sm.dbClient.Query(""))
+	if err := conn.UseKeyspace(config.G.Cassandra.Keyspace); err != nil {
+		// Note: "USE <keyspace>" isn't allowed, and conn.UseKeyspace() isn't sticky.
+		config.G.Log.System.LogInfo("Keyspace not found: %v", err)
+		var options string
+		if len(config.G.Cassandra.CreateOpts) > 0 {
+			options = "," + config.G.Cassandra.CreateOpts
+		}
+		query := fmt.Sprintf(
+			"CREATE KEYSPACE %s WITH replication = {'class':'%s'%s}",
+			config.G.Cassandra.Keyspace, config.G.Cassandra.Strategy, options)
+		config.G.Log.System.LogDebug(query)
+		if err := sm.dbClient.Query(query).Exec(); err != nil {
+			config.G.Log.System.LogFatal("Could not create keyspace: %v", err)
+		}
+		config.G.Log.System.LogInfo("Keyspace %q created", config.G.Cassandra.Keyspace)
+	}
+
+	// Create tables if they do not exist
+	ksmd, _ := sm.dbClient.KeyspaceMetadata(config.G.Cassandra.Keyspace)
 	for _, table := range config.G.RollupTables {
+		if ksmd != nil {
+			if _, found := ksmd.Tables[table]; found {
+				continue
+			}
+		}
 		var ttlfloat float64
 		ttl := strings.Split(table, "_")[1]
 		ttlfloat, _ = strconv.ParseFloat(ttl, 64)
 		query := fmt.Sprintf(
-			`CREATE TABLE IF NOT EXISTS %s (path text, timestamp timestamp, stat double, PRIMARY KEY (path, timestamp)) 
-			WITH COMPACT STORAGE
-			  AND CLUSTERING ORDER BY (timestamp ASC)
-			  AND compaction = {'class': 'org.apache.cassandra.db.compaction.DateTieredCompactionStrategy'}
-			  AND compression = {'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
-			  AND dclocal_read_repair_chance = 0.1
-			  AND default_time_to_live = %v
-			  AND gc_grace_seconds = 864000
-			  AND memtable_flush_period_in_ms = 0
-			  AND read_repair_chance = 0.0
-			  AND speculative_retry = '99.0PERCENTILE';`, table, int(ttlfloat*1.1))
+			`CREATE TABLE IF NOT EXISTS %s.%s
+                (path text, timestamp timestamp, stat double, PRIMARY KEY (path, timestamp))
+            WITH COMPACT STORAGE
+                AND CLUSTERING ORDER BY (timestamp ASC)
+                AND compaction = {'class': 'org.apache.cassandra.db.compaction.DateTieredCompactionStrategy'}
+                AND compression = {'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
+                AND dclocal_read_repair_chance = 0.1
+                AND default_time_to_live = %v
+                AND gc_grace_seconds = 864000
+                AND memtable_flush_period_in_ms = 0
+                AND read_repair_chance = 0.0
+                AND speculative_retry = '99.0PERCENTILE';`,
+			config.G.Cassandra.Keyspace, table, int(ttlfloat*1.1))
 
 		config.G.Log.System.LogDebug(query)
+		config.G.Log.System.LogInfo("Creating table %q", table)
 
 		if err := sm.dbClient.Query(query).Exec(); err != nil {
-			config.G.Log.System.LogFatal("Could not configure cassabon keyspace, error is %v", err.Error())
+			config.G.Log.System.LogFatal("Table %q creation failed: %v", table, err)
 		}
 	}
 }
@@ -126,7 +156,7 @@ func (sm *StoreManager) run() {
 	sm.dbClient, err = middleware.CassandraSession(
 		config.G.Cassandra.Hosts,
 		config.G.Cassandra.Port,
-		"cassabon",
+		"",
 	)
 	if err != nil {
 		// Without Cassandra client we can't do our job, so log, whine, and crash.
@@ -267,24 +297,22 @@ func (sm *StoreManager) flush(terminating bool) {
 		// Inspect each rollup window defined for this expression.
 		for i, windowEnd := range rl.nextWriteTime {
 
-			// If the window has closed, process and clear the data.
-			if windowEnd.Before(baseTime) {
+			// If the window has closed, or if terminating, process and clear the data.
+			if windowEnd.Before(baseTime) || terminating {
+
+				var statTime time.Time
+				if terminating {
+					statTime = baseTime
+				} else {
+					statTime = windowEnd
+				}
 
 				// Iterate over all the paths that match the current expression.
 				for path, rollup := range rl.path {
 
-					// Has any data accumulated while the window was open?
 					if rollup.count[i] > 0 {
-						// TODO: Write the data to persistent storage.
-						config.G.Log.System.LogInfo("Write expr=%s win=%v ret=%v ts=%v path=%s value=%.4f",
-							expr,
-							sm.rollup[expr].Windows[i].Window,
-							sm.rollup[expr].Windows[i].Retention,
-							windowEnd.Format("15:04:05.000"), // Window end time
-							path,
-							rollup.value[i])
-
-						sm.write(path, windowEnd, rollup.value[i], sm.rollup[expr].Windows[i].Table)
+						// Data has accumulated while this window was open; write it.
+						sm.write(expr, sm.rollup[expr].Windows[i], path, statTime, rollup.value[i])
 					}
 
 					// Ensure the bucket is empty for the next open window.
@@ -295,36 +323,6 @@ func (sm *StoreManager) flush(terminating bool) {
 				// Set a new window closing time for the just-cleared window.
 				rl.nextWriteTime[i] = nextTimeBoundary(baseTime, sm.rollup[expr].Windows[i].Window)
 			}
-
-			// If terminating, write out all remaining data, stamped with current time.
-			if terminating {
-
-				// Iterate over all the paths that match the current expression.
-				for path, rollup := range rl.path {
-
-					// Has any data accumulated while the window was open?
-					if rollup.count[i] > 0 {
-						// TODO: Write the data to persistent storage.
-						config.G.Log.System.LogInfo("Write expr=%s win=%v ret=%v ts=%v path=%s value=%.4f",
-							expr,
-							sm.rollup[expr].Windows[i].Window,
-							sm.rollup[expr].Windows[i].Retention,
-							baseTime.Format("15:04:05.000"), // Current time, window end is in future
-							path,
-							rollup.value[i])
-
-						sm.write(path, baseTime, rollup.value[i], sm.rollup[expr].Windows[i].Table)
-					}
-
-					// Ensure the bucket is empty for the next open window.
-					rollup.count[i] = 0
-					rollup.value[i] = 0
-				}
-
-				// Set a new window closing time for the just-cleared window.
-				rl.nextWriteTime[i] = nextTimeBoundary(baseTime, sm.rollup[expr].Windows[i].Window)
-			}
-
 			// ASSERT: rl.nextWriteTime[i] time is in the future (later than baseTime).
 
 			// Adjust the timer delay downwards if this window closing time is
@@ -355,10 +353,17 @@ func (sm *StoreManager) flush(terminating bool) {
 }
 
 // flush persists the accumulated metrics to the database.
-func (sm *StoreManager) write(path string, ts time.Time, value float64, table string) {
-	query := fmt.Sprintf(`INSERT INTO %s (path, timestamp, stat) VALUES (?, ?, ?)`, table)
+func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, ts time.Time, value float64) {
+
+	config.G.Log.Carbon.LogInfo("match=%q tbl=%s ts=%v path=%s val=%.4f win=%v ret=%v ",
+		expr, w.Table, ts.Format("15:04:05.000"), path, value, w.Window, w.Retention)
+
+	query := fmt.Sprintf(
+		`INSERT INTO %s.%s (path, timestamp, stat) VALUES (?, ?, ?)`,
+		config.G.Cassandra.Keyspace, w.Table)
+
 	if err := sm.dbClient.Query(query, path, ts, value).Exec(); err != nil {
 		// Could not write to Cassandra cluster...we should scream loudly about this.  Possibly a failure case?.
-		config.G.Log.System.LogError("Unable to write stats to Cassandra cluster, error is %s", err.Error())
+		config.G.Log.System.LogError("Cassandra write error: %v", err)
 	}
 }

@@ -29,27 +29,27 @@ func (indexer *MetricsIndexer) run() {
 
 	// Initialize Redis client pool.
 	var err error
-	if config.G.Redis.Index.Sentinel {
+	if config.G.Redis.Sentinel {
 		config.G.Log.System.LogDebug("Indexer initializing Redis client (Sentinel)")
 		indexer.rc, err = middleware.RedisFailoverClient(
-			config.G.Redis.Index.Addr,
-			config.G.Redis.Index.Pwd,
-			config.G.Redis.Index.Master,
-			config.G.Redis.Index.DB,
+			config.G.Redis.Addr,
+			config.G.Redis.Pwd,
+			config.G.Redis.Master,
+			config.G.Redis.DB,
 		)
 	} else {
 		config.G.Log.System.LogDebug("Indexer initializing Redis client")
 		indexer.rc, err = middleware.RedisClient(
-			config.G.Redis.Index.Addr,
-			config.G.Redis.Index.Pwd,
-			config.G.Redis.Index.DB,
+			config.G.Redis.Addr,
+			config.G.Redis.Pwd,
+			config.G.Redis.DB,
 		)
 	}
 
 	if err != nil {
 		// Without Redis client we can't do our job, so log, whine, and crash.
 		config.G.Log.System.LogFatal("Indexer unable to connect to Redis at %v: %v",
-			config.G.Redis.Index.Addr, err)
+			config.G.Redis.Addr, err)
 	}
 
 	defer indexer.rc.Close()
@@ -99,7 +99,7 @@ func (indexer *MetricsIndexer) processMetricPath(splitPath []string, pathLen int
 		z := redis.Z{0, metricPath}
 
 		// Put it in the pipeline.
-		pipe.ZAdd("cassabon", z)
+		pipe.ZAdd(config.G.Redis.PathKeyname, z)
 
 		// Pop the last node of the metric off, set isLeaf to false, and resume loop.
 		_, splitPath = splitPath[len(splitPath)-1], splitPath[:len(splitPath)-1]
