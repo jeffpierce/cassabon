@@ -110,10 +110,7 @@ type Globals struct {
 
 	Cassandra CassandraSettings
 
-	Redis struct {
-		Index RedisSettings // Settings for Redis Index
-		Queue RedisSettings // Settings for Redis Queue
-	}
+	Redis RedisSettings
 
 	// Configuration of data rollups.
 	RollupPriority []string             // First matched expression wins

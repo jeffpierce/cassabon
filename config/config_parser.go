@@ -39,11 +39,8 @@ type CassabonConfig struct {
 		HealthCheckFile string // Location of healthcheck file.
 	}
 	Cassandra CassandraSettings
-	Redis     struct {
-		Index RedisSettings // Settings for Redis Index
-		Queue RedisSettings // Settings for Redis Queue
-	}
-	Rollups map[string]RollupSettings // Map of regex and rollups
+	Redis     RedisSettings
+	Rollups   map[string]RollupSettings // Map of regex and rollups
 }
 
 // Definition of each rollup
@@ -63,11 +60,12 @@ type CassandraSettings struct {
 
 // Redis struct for redis connection information
 type RedisSettings struct {
-	Sentinel bool     // True if sentinel, false if standalone.
-	Addr     []string // List of addresses in host:port format
-	DB       int64    // Redis DB number for the index.
-	Pwd      string   // Password for Redis.
-	Master   string   // Master config name for sentinel settings.
+	Addr        []string // List of addresses in host:port format
+	DB          int64    // Redis DB number for the index.
+	Pwd         string   // Password for Redis.
+	PathKeyname string   // Name of the key under which paths are indexed
+	Sentinel    bool     // True if sentinel, false if standalone.
+	Master      string   // Master config name for sentinel settings.
 }
 
 type StatsdSettings struct {
@@ -224,8 +222,10 @@ func LoadRefreshableValues() {
 	}
 
 	// Copy in the Redis database connection values.
-	G.Redis.Index = rawCassabonConfig.Redis.Index
-	G.Redis.Queue = rawCassabonConfig.Redis.Queue
+	G.Redis = rawCassabonConfig.Redis
+	if G.Redis.PathKeyname == "" {
+		G.Redis.PathKeyname = "cassabon"
+	}
 }
 
 // LoadRollups populates the global config object with the rollup definitions,
