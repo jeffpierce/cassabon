@@ -90,7 +90,7 @@ func (gopher *StatPathGopher) query(q config.IndexQuery) {
 	splitWild := strings.Split(statQuery, "*")
 
 	// Determine if we need a simple query or a complex one.
-	// len(splitWild) == 2 and splitWild[-1] == "" means we have an ending wildcard only.
+	// len(splitWild) == 2 and splitWild[1] == "" means we have an ending wildcard only.
 	if len(splitWild) == 1 {
 		q.Channel <- gopher.noWild(statQuery, len(queryNodes))
 	} else if len(splitWild) == 2 && splitWild[1] == "" {
