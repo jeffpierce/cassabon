@@ -17,6 +17,7 @@ type StatPathGopher struct {
 	rc *redis.Client // Redis client connection
 }
 
+// MetricResponse defines the individual elements returned as an array by "GET /paths".
 type MetricResponse struct {
 	Path   string `json:"path"`
 	Depth  int    `json:"depth"`
@@ -100,8 +101,9 @@ func (gopher *StatPathGopher) query(q config.IndexQuery) {
 	}
 }
 
+// getMax returns the max range parameter for a ZRANGEBYLEX.
 func (gopher *StatPathGopher) getMax(s string) string {
-	// Returns the max range parameter for a ZRANGEBYLEX
+
 	var max string
 
 	if s[len(s)-1:] == "." || s[len(s)-1:] == ":" {
@@ -115,7 +117,29 @@ func (gopher *StatPathGopher) getMax(s string) string {
 	return max
 }
 
+// noWild performs fetches for strings with no wildcard characters.
+func (gopher *StatPathGopher) noWild(q string, l int) []byte {
+
+	// No wild card means we should be retrieving one stat, or none at all.
+	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", q, ":"}, "")
+	queryStringMax := gopher.getMax(queryString)
+
+	resp, err := gopher.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
+		queryString, queryStringMax, 0, 0,
+	}).Result()
+
+	if err != nil || len(resp) == 0 {
+		// Error or empty set, return an empty set.
+		config.G.Log.System.LogInfo("Redis error or zero length response.")
+		return nil
+	}
+
+	return gopher.processQueryResults(resp, l)
+}
+
+// simpleWild performs fetches for strings with one wildcard char, in the last position.
 func (gopher *StatPathGopher) simpleWild(q string, l int) []byte {
+
 	// Queries with an ending wild card only are easy, as the response from
 	// ZRANGEBYLEX <key> [bigE_len:path [bigE_len:path\xff is the answer.
 	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", q}, "")
@@ -136,25 +160,9 @@ func (gopher *StatPathGopher) simpleWild(q string, l int) []byte {
 	return gopher.processQueryResults(resp, l)
 }
 
-func (gopher *StatPathGopher) noWild(q string, l int) []byte {
-	// No wild card means we should be retrieving one stat, or none at all.
-	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", q, ":"}, "")
-	queryStringMax := gopher.getMax(queryString)
-
-	resp, err := gopher.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
-		queryString, queryStringMax, 0, 0,
-	}).Result()
-
-	if err != nil || len(resp) == 0 {
-		// Error or empty set, return an empty set.
-		config.G.Log.System.LogInfo("Redis error or zero length response.")
-		return nil
-	}
-
-	return gopher.processQueryResults(resp, l)
-}
-
+// complexWild performs fetches for strings with multiple wildcard characters.
 func (gopher *StatPathGopher) complexWild(splitWild []string, l int) []byte {
+
 	// Resolve multiple wildcards by pulling in the nodes with length l that start with
 	// the first part of the non-wildcard, then filter that set with a regex match.
 	var matches []string
@@ -197,8 +205,11 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) []byte {
 	return gopher.processQueryResults(matches, l)
 }
 
+// processQueryResults converts the results to JSON text.
 func (gopher *StatPathGopher) processQueryResults(results []string, l int) []byte {
+
 	var responseList []MetricResponse
+
 	// Process the result into a map, make it a string, send it along is the goal here.
 	for _, match := range results {
 		decodedString := strings.Split(match, ":")
