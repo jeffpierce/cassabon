@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -88,6 +90,19 @@ func TextToSeverity(s string) (Severity, error) {
 	return sev, err
 }
 
+// FatalError is a custom error that can be distinguished in the global panic handler.
+type FatalError struct {
+	file     string
+	line     int
+	function string
+	msg      string
+}
+
+// Error function makes the FatalError object conform to the error interface.
+func (e *FatalError) Error() string {
+	return fmt.Sprintf("FATAL %s:%d %s() %s", e.file, e.line, e.function, e.msg)
+}
+
 // The FileLogger object.
 type FileLogger struct {
 	m           sync.RWMutex // Serialize access to logger during log rotation
@@ -95,6 +110,7 @@ type FileLogger struct {
 	logFilename string       // The name of the log file
 	logLevel    Severity     // The severity threshold for generating output.
 	opened      bool         // Whether the logger has been opened or not
+	skipEmit    bool         // flag to permit panicing without incurring deadlock
 	logFile     *os.File     // The file handle of the opened file
 	logger      *log.Logger  // The logger that writes to the file
 }
@@ -179,12 +195,14 @@ func (l *FileLogger) LogError(format string, a ...interface{}) {
 // LogFatal writes a time-stamped Fatal message to the log file, with a mutex guard.
 func (l *FileLogger) LogFatal(format string, a ...interface{}) {
 
-	if l.opened {
+	if l.opened && !l.skipEmit {
 		l.m.RLock()
 		defer l.m.RUnlock()
 		l.emit(Fatal, format, a...)
 	}
-	panic(fmt.Errorf(format, a...))
+	pc, file, line, _ := runtime.Caller(1)
+	f := strings.Split(runtime.FuncForPC(pc).Name(), ".")
+	panic(FatalError{path.Base(file), line, f[len(f)-1], fmt.Sprintf(format, a...)})
 }
 
 // reopen closes and re-opens the log file to support log rotation.
@@ -211,7 +229,8 @@ func (l *FileLogger) openLogfile() *os.File {
 			l.logFile.Close()
 		}
 		// Inability to log is a fatal error. We do not run blind.
-		panic(fmt.Errorf("Unable to (re)open logfile '%v'. Error: '%v'", l.logFilename, err))
+		l.skipEmit = true // Message already emitted, just panic
+		l.LogFatal("Unable to reopen logfile '%v'. Error: '%v'", l.logFilename, err)
 	}
 
 	return fp

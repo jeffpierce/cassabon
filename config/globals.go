@@ -120,7 +120,16 @@ type Globals struct {
 
 func (g *Globals) OnPanic() {
 	if err := recover(); err != nil {
-		fmt.Fprintf(os.Stderr, "ABORT: %v\n", err)
-		os.Exit(1) // Let OS know we aborted
+		switch err.(type) {
+		case logging.FatalError:
+			// This is an error that we generated to terminate the program.
+			e := err.(logging.FatalError)
+			fmt.Fprintf(os.Stderr, "%s\n", e.Error())
+			os.Exit(1) // Let OS know we aborted
+		default:
+			// This is an error due to a bug; print full details and terminate.
+			// Note: panic() writes to stderr.
+			panic(err)
+		}
 	}
 }
