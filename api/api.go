@@ -49,16 +49,38 @@ func (api *CassabonAPI) run() {
 	graceful.ListenAndServe(api.hostPort, api.server)
 }
 
+// pathsHandler processes requests like "GET /paths?query=foo".
 func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
+
 	// Create channel for use in communicating with the statGopher
-	ch := make(chan []byte)
+	ch := make(chan config.IndexQueryResponse)
+
+	// Extract the query, and build the query to be sent to the indexer.
 	_ = r.ParseForm()
 	pathQuery := config.IndexQuery{r.Form.Get("query"), ch}
 	config.G.Log.System.LogDebug("Received query: %s", pathQuery.Query)
+
+	// Pass on the query, and read the response.
 	config.G.Channels.Gopher <- pathQuery
 	resp := <-pathQuery.Channel
 	close(pathQuery.Channel)
-	fmt.Fprintf(w, string(resp))
+
+	// Send the response to the client.
+	switch resp.Status {
+	case config.IQS_OK:
+		w.Write(resp.Payload)
+	case config.IQS_NOCONTENT:
+		w.WriteHeader(http.StatusNoContent)
+	case config.IQS_NOTFOUND:
+		w.WriteHeader(http.StatusNotFound)
+		w.Write(resp.Payload)
+	case config.IQS_BADREQUEST:
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write(resp.Payload)
+	case config.IQS_ERROR:
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(resp.Payload)
+	}
 }
 
 func (api *CassabonAPI) metricsHandler(w http.ResponseWriter, r *http.Request) {
