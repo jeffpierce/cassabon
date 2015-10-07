@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/zenazn/goji/graceful"
 	"github.com/zenazn/goji/web"
@@ -65,13 +66,23 @@ func (api *CassabonAPI) metricsHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Not yet implemented.")
 }
 
+// healthHandler responds with either ALIVE or DEAD, for use by the load balancer.
 func (api *CassabonAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
-	health, err := ioutil.ReadFile(config.G.API.HealthCheckFile)
-	if err != nil {
-		config.G.Log.System.LogError("Cannot read healthcheck file, error %v", err)
+
+	// We are alive, unless the healthcheck file says we are dead.
+	var alive bool = true
+
+	if health, err := ioutil.ReadFile(config.G.API.HealthCheckFile); err == nil {
+		if strings.ToUpper(strings.TrimSpace(string(health))) == "DEAD" {
+			alive = false
+		}
+	}
+
+	if alive {
+		fmt.Fprint(w, "ALIVE")
+	} else {
 		fmt.Fprint(w, "DEAD")
 	}
-	fmt.Fprintf(w, string(health))
 }
 
 func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *http.Request) {
