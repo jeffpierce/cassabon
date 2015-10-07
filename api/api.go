@@ -53,7 +53,7 @@ func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 	ch := make(chan []byte)
 	_ = r.ParseForm()
 	pathQuery := config.IndexQuery{r.Form.Get("query"), ch}
-	config.G.Log.API.LogDebug("Received query: %s", pathQuery.Query)
+	config.G.Log.System.LogDebug("Received query: %s", pathQuery.Query)
 	config.G.Channels.Gopher <- pathQuery
 	resp := <-pathQuery.Channel
 	close(pathQuery.Channel)
@@ -68,7 +68,7 @@ func (api *CassabonAPI) metricsHandler(w http.ResponseWriter, r *http.Request) {
 func (api *CassabonAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
 	health, err := ioutil.ReadFile(config.G.API.HealthCheckFile)
 	if err != nil {
-		config.G.Log.API.LogError("Cannot read healthcheck file, error %v", err)
+		config.G.Log.System.LogError("Cannot read healthcheck file, error %v", err)
 		fmt.Fprint(w, "DEAD")
 	}
 	fmt.Fprintf(w, string(health))
