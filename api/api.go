@@ -76,11 +76,9 @@ func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 	case config.IQS_NOTFOUND:
 		api.notFoundHandler(w, r)
 	case config.IQS_BADREQUEST:
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write(resp.Payload)
+		api.sendErrorResponse(w, http.StatusBadRequest, "bad request", resp.Message)
 	case config.IQS_ERROR:
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write(resp.Payload)
+		api.sendErrorResponse(w, http.StatusInternalServerError, "internal error", resp.Message)
 	}
 }
 
@@ -131,7 +129,23 @@ func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonText)
 }
 
+func (api *CassabonAPI) sendErrorResponse(w http.ResponseWriter, status int, text string, message string) {
+
+	resp := struct {
+		Status     int    `json:"status"`
+		StatusText string `json:"statustext"`
+		Message    string `json:"message"`
+	}{}
+
+	resp.Status = status
+	resp.StatusText = text
+	resp.Message = message
+	jsonText, _ := json.Marshal(resp)
+
+	w.WriteHeader(status)
+	w.Write(jsonText)
+}
+
 func (api *CassabonAPI) notFoundHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotFound)
-	w.Write([]byte(`{"status":"404","statustext":"not found"}`))
+	api.sendErrorResponse(w, http.StatusNotFound, "not found", r.RequestURI)
 }
