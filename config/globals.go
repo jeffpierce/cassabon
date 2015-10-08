@@ -17,9 +17,24 @@ type CarbonMetric struct {
 	Timestamp float64 // Epoch timestamp
 }
 
+type IndexQueryStatus int
+
+const (
+	IQS_OK IndexQueryStatus = iota
+	IQS_NOCONTENT
+	IQS_NOTFOUND
+	IQS_BADREQUEST
+	IQS_ERROR
+)
+
 type IndexQuery struct {
-	Query   string      // Query
-	Channel chan []byte // Channel to send response back on.
+	Query   string                  // Query
+	Channel chan IndexQueryResponse // Channel to send response back on.
+}
+
+type IndexQueryResponse struct {
+	Status  IndexQueryStatus
+	Payload []byte
 }
 
 // RollupMethod is the way in which data points are combined in a time interval.
