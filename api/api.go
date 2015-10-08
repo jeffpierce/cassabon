@@ -74,7 +74,7 @@ func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 	case config.IQS_NOCONTENT:
 		w.WriteHeader(http.StatusNoContent)
 	case config.IQS_NOTFOUND:
-		api.notFoundHandler(w, r)
+		api.sendErrorResponse(w, http.StatusNotFound, "not found", resp.Message)
 	case config.IQS_BADREQUEST:
 		api.sendErrorResponse(w, http.StatusBadRequest, "bad request", resp.Message)
 	case config.IQS_ERROR:
