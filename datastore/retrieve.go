@@ -134,7 +134,8 @@ func (gopher *StatPathGopher) noWild(q string, l int) config.IndexQueryResponse 
 		return config.IndexQueryResponse{config.IQS_ERROR, []byte("")}
 	}
 	if len(resp) == 0 {
-		return config.IndexQueryResponse{config.IQS_NOTFOUND, []byte("")}
+		// Return an empty array.
+		return config.IndexQueryResponse{config.IQS_OK, []byte{'[', ']'}}
 	}
 
 	return config.IndexQueryResponse{config.IQS_OK, gopher.processQueryResults(resp, l)}
@@ -158,7 +159,8 @@ func (gopher *StatPathGopher) simpleWild(q string, l int) config.IndexQueryRespo
 		return config.IndexQueryResponse{config.IQS_ERROR, []byte("")}
 	}
 	if len(resp) == 0 {
-		return config.IndexQueryResponse{config.IQS_OK, []byte{'{', '}'}}
+		// Return an empty array.
+		return config.IndexQueryResponse{config.IQS_OK, []byte{'[', ']'}}
 	}
 
 	return config.IndexQueryResponse{config.IQS_OK, gopher.processQueryResults(resp, l)}
@@ -189,7 +191,8 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) config.Inde
 		return config.IndexQueryResponse{config.IQS_ERROR, []byte("")}
 	}
 	if len(resp) == 0 {
-		return config.IndexQueryResponse{config.IQS_OK, []byte{'{', '}'}}
+		// Return an empty array.
+		return config.IndexQueryResponse{config.IQS_OK, []byte{'[', ']'}}
 	}
 
 	// Build regular expression to match against results.
@@ -216,7 +219,8 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) config.Inde
 	if len(matches) > 0 {
 		return config.IndexQueryResponse{config.IQS_OK, gopher.processQueryResults(matches, l)}
 	} else {
-		return config.IndexQueryResponse{config.IQS_OK, []byte{'{', '}'}}
+		// Return an empty array.
+		return config.IndexQueryResponse{config.IQS_OK, []byte{'[', ']'}}
 	}
 }
 
