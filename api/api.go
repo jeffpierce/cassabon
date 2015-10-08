@@ -2,6 +2,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -36,12 +37,13 @@ func (api *CassabonAPI) run() {
 	api.server = web.New()
 
 	// Define routes
+	api.server.Get("/", api.rootHandler)
 	api.server.Get("/paths", api.pathsHandler)
 	api.server.Get("/metrics", api.metricsHandler)
 	api.server.Get("/healthcheck", api.healthHandler)
 	api.server.Delete("/remove/path/:path", api.deletePathHandler)
 	api.server.Delete("/remove/metric/:metric", api.deleteMetricHandler)
-	api.server.Get("/", api.notFound)
+	api.server.NotFound(api.notFoundHandler)
 
 	api.server.Use(requestLogger)
 
@@ -72,8 +74,7 @@ func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 	case config.IQS_NOCONTENT:
 		w.WriteHeader(http.StatusNoContent)
 	case config.IQS_NOTFOUND:
-		w.WriteHeader(http.StatusNotFound)
-		w.Write(resp.Payload)
+		api.notFoundHandler(w, r)
 	case config.IQS_BADREQUEST:
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write(resp.Payload)
@@ -117,6 +118,20 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 	fmt.Fprintf(w, "Not yet implemented, would have deleted %s", c.URLParams["metric"])
 }
 
-func (api *CassabonAPI) notFound(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Cassabon.  You know, for stats!")
+func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
+	resp := struct {
+		Message string `json:"message"`
+		Github  string `json:"github"`
+		Version string `json:"version"`
+	}{}
+	resp.Message = "Cassabon.  You know, for stats!"
+	resp.Github = "https://github.com/jeffpierce/cassabon"
+	resp.Version = "0.0.1"
+	jsonText, _ := json.Marshal(resp)
+	w.Write(jsonText)
+}
+
+func (api *CassabonAPI) notFoundHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotFound)
+	w.Write([]byte(`{"status":"404","statustext":"not found"}`))
 }
