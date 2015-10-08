@@ -13,6 +13,7 @@ config/*.yaml
 config/healthcheckfile
 
 # Build artifacts
+config/version.go
 devtools/echostats
 devtools/stresstest
 

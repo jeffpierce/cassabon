@@ -33,8 +33,9 @@ type IndexQuery struct {
 }
 
 type IndexQueryResponse struct {
-	Status  IndexQueryStatus
-	Payload []byte
+	Status  IndexQueryStatus // Either IQS_OK, or one of the error codes
+	Message string           // If Status != IQS_OK, a description of the error
+	Payload []byte           // If Status == IQS_OK, a well-formed JSON payload
 }
 
 // RollupMethod is the way in which data points are combined in a time interval.

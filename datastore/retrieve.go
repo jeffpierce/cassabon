@@ -85,6 +85,11 @@ func (gopher *StatPathGopher) query(q config.IndexQuery) {
 	// Listen to the channel, get string query.
 	statQuery := q.Query
 
+	if statQuery == "" {
+		q.Channel <- config.IndexQueryResponse{config.IQS_BADREQUEST, "no query specified", []byte{}}
+		return
+	}
+
 	// Split it since we need the node length for the Redis Query
 	queryNodes := strings.Split(statQuery, ".")
 
@@ -131,13 +136,14 @@ func (gopher *StatPathGopher) noWild(q string, l int) config.IndexQueryResponse 
 
 	if err != nil {
 		config.G.Log.System.LogWarn("Redis read error: %v", err)
-		return config.IndexQueryResponse{config.IQS_ERROR, []byte("")}
+		return config.IndexQueryResponse{config.IQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
-		return config.IndexQueryResponse{config.IQS_NOTFOUND, []byte("")}
+		// Return an empty array.
+		return config.IndexQueryResponse{config.IQS_OK, "", []byte{'[', ']'}}
 	}
 
-	return config.IndexQueryResponse{config.IQS_OK, gopher.processQueryResults(resp, l)}
+	return config.IndexQueryResponse{config.IQS_OK, "", gopher.processQueryResults(resp, l)}
 }
 
 // simpleWild performs fetches for strings with one wildcard char, in the last position.
@@ -155,13 +161,14 @@ func (gopher *StatPathGopher) simpleWild(q string, l int) config.IndexQueryRespo
 
 	if err != nil {
 		config.G.Log.System.LogWarn("Redis read error: %v", err)
-		return config.IndexQueryResponse{config.IQS_ERROR, []byte("")}
+		return config.IndexQueryResponse{config.IQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
-		return config.IndexQueryResponse{config.IQS_OK, []byte{'{', '}'}}
+		// Return an empty array.
+		return config.IndexQueryResponse{config.IQS_OK, "", []byte{'[', ']'}}
 	}
 
-	return config.IndexQueryResponse{config.IQS_OK, gopher.processQueryResults(resp, l)}
+	return config.IndexQueryResponse{config.IQS_OK, "", gopher.processQueryResults(resp, l)}
 }
 
 // complexWild performs fetches for strings with multiple wildcard characters.
@@ -186,10 +193,11 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) config.Inde
 
 	if err != nil {
 		config.G.Log.System.LogWarn("Redis read error: %v", err)
-		return config.IndexQueryResponse{config.IQS_ERROR, []byte("")}
+		return config.IndexQueryResponse{config.IQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
-		return config.IndexQueryResponse{config.IQS_OK, []byte{'{', '}'}}
+		// Return an empty array.
+		return config.IndexQueryResponse{config.IQS_OK, "", []byte{'[', ']'}}
 	}
 
 	// Build regular expression to match against results.
@@ -199,11 +207,7 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) config.Inde
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not compile %s into regex: %v", rawRegex, err)
 		config.G.Log.System.LogWarn(errMsg)
-		var emsg = struct {
-			Errmsg string `json:"errmsg"`
-		}{errMsg}
-		jsonText, _ := json.Marshal(emsg)
-		return config.IndexQueryResponse{config.IQS_BADREQUEST, jsonText}
+		return config.IndexQueryResponse{config.IQS_BADREQUEST, errMsg, []byte{}}
 	}
 
 	for _, iter := range resp {
@@ -214,9 +218,10 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) config.Inde
 	}
 
 	if len(matches) > 0 {
-		return config.IndexQueryResponse{config.IQS_OK, gopher.processQueryResults(matches, l)}
+		return config.IndexQueryResponse{config.IQS_OK, "", gopher.processQueryResults(matches, l)}
 	} else {
-		return config.IndexQueryResponse{config.IQS_OK, []byte{'{', '}'}}
+		// Return an empty array.
+		return config.IndexQueryResponse{config.IQS_OK, "", []byte{'[', ']'}}
 	}
 }
 
