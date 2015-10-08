@@ -83,8 +83,8 @@ func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *CassabonAPI) metricsHandler(w http.ResponseWriter, r *http.Request) {
-	// Have to wait for the Cassandra worker to get implemented.
-	fmt.Fprintf(w, "Not yet implemented.")
+	// TODO: Have to wait for the Cassandra worker to get implemented.
+	api.sendErrorResponse(w, http.StatusNotImplemented, "not implemented", "")
 }
 
 // healthHandler responds with either ALIVE or DEAD, for use by the load balancer.
@@ -107,13 +107,13 @@ func (api *CassabonAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *http.Request) {
-	// TODO:  Implement this in datastore.
-	fmt.Fprintf(w, "Not yet implemented, would have deleted %s", c.URLParams["path"])
+	// TODO:  Implement this in datastore.  c.URLParams["path"]
+	api.sendErrorResponse(w, http.StatusNotImplemented, "not implemented", "")
 }
 
 func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *http.Request) {
-	// TODO:  Implement this in datastore.
-	fmt.Fprintf(w, "Not yet implemented, would have deleted %s", c.URLParams["metric"])
+	// TODO:  Implement this in datastore.  c.URLParams["metric"]
+	api.sendErrorResponse(w, http.StatusNotImplemented, "not implemented", "")
 }
 
 func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
