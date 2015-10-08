@@ -124,7 +124,7 @@ func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
 	}{}
 	resp.Message = "Cassabon.  You know, for stats!"
 	resp.Github = "https://github.com/jeffpierce/cassabon"
-	resp.Version = "0.0.1"
+	resp.Version = config.Version
 	jsonText, _ := json.Marshal(resp)
 	w.Write(jsonText)
 }
