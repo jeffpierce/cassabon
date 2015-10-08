@@ -59,8 +59,8 @@ func (gopher *StatPathGopher) run() {
 
 	if err != nil {
 		// Without Redis client we can't do our job, so log, whine, and crash.
-		config.G.Log.System.LogFatal("Gopher unable to connect to Redis at %v: %v",
-			config.G.Redis.Addr, err)
+		config.G.Log.System.LogFatal("Gopher unable to connect to Redis at %v: %s",
+			config.G.Redis.Addr, err.Error())
 	}
 
 	defer gopher.rc.Close()
@@ -135,7 +135,7 @@ func (gopher *StatPathGopher) noWild(q string, l int) config.IndexQueryResponse 
 	}).Result()
 
 	if err != nil {
-		config.G.Log.System.LogWarn("Redis read error: %v", err)
+		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
 		return config.IndexQueryResponse{config.IQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
@@ -160,7 +160,7 @@ func (gopher *StatPathGopher) simpleWild(q string, l int) config.IndexQueryRespo
 	}).Result()
 
 	if err != nil {
-		config.G.Log.System.LogWarn("Redis read error: %v", err)
+		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
 		return config.IndexQueryResponse{config.IQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
@@ -192,7 +192,7 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) config.Inde
 		"Received %v as response from redis.", resp)
 
 	if err != nil {
-		config.G.Log.System.LogWarn("Redis read error: %v", err)
+		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
 		return config.IndexQueryResponse{config.IQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
@@ -205,7 +205,7 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) config.Inde
 	config.G.Log.System.LogDebug("Attempting to compile %s into regex", rawRegex)
 	regex, err := regexp.Compile(rawRegex)
 	if err != nil {
-		errMsg := fmt.Sprintf("Could not compile %s into regex: %v", rawRegex, err)
+		errMsg := fmt.Sprintf("Could not compile %s into regex: %s", rawRegex, err.Error())
 		config.G.Log.System.LogWarn(errMsg)
 		return config.IndexQueryResponse{config.IQS_BADREQUEST, errMsg, []byte{}}
 	}

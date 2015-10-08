@@ -73,7 +73,7 @@ func (cpl *CarbonPlaintextListener) carbonTCP(hostPort string) {
 	tcpListener, err := net.ListenTCP("tcp4", tcpaddr)
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
-		config.G.Log.System.LogFatal("Cannot listen for Carbon on TCP: %v", err)
+		config.G.Log.System.LogFatal("Cannot listen for Carbon on TCP: %s", err.Error())
 	}
 	defer tcpListener.Close()
 	config.G.Log.System.LogInfo("Listening on %s TCP for Carbon plaintext protocol", tcpListener.Addr().String())
@@ -94,7 +94,7 @@ func (cpl *CarbonPlaintextListener) carbonTCP(hostPort string) {
 				if err.(net.Error).Timeout() {
 					config.G.Log.System.LogDebug("CarbonTCP Accept() timed out")
 				} else {
-					config.G.Log.System.LogWarn("CarbonTCP Accept() error: %v", err)
+					config.G.Log.System.LogWarn("CarbonTCP Accept() error: %s", err.Error())
 				}
 			}
 		}
@@ -123,7 +123,7 @@ func (cpl *CarbonPlaintextListener) carbonUDP(hostPort string) {
 	udpConn, err := net.ListenUDP("udp", udpaddr)
 	if err != nil {
 		// If we can't grab a port, we can't do our job.  Log, whine, and crash.
-		config.G.Log.System.LogFatal("Cannot listen for Carbon on UDP: %v", err)
+		config.G.Log.System.LogFatal("Cannot listen for Carbon on UDP: %s", err.Error())
 	}
 	defer udpConn.Close()
 	config.G.Log.System.LogInfo("Listening on %s UDP for Carbon plaintext protocol", udpConn.LocalAddr().String())
@@ -178,7 +178,7 @@ func (cpl *CarbonPlaintextListener) carbonUDP(hostPort string) {
 				if err.(net.Error).Timeout() {
 					config.G.Log.System.LogDebug("CarbonUDP Read() timed out")
 				} else {
-					config.G.Log.System.LogWarn("CarbonUDP Read() error: %v", err)
+					config.G.Log.System.LogWarn("CarbonUDP Read() error: %s", err.Error())
 				}
 			}
 		}
@@ -254,7 +254,7 @@ func (cpl *CarbonPlaintextListener) processPeerCommand(cmd, line string) {
 		sort.Strings(peers)
 		config.G.Log.System.LogInfo("Command: peerlist=%q", peers)
 		if err := config.ValidatePeerList(config.G.Carbon.Listen, peers); err != nil {
-			config.G.Log.System.LogWarn("peerlist error: %v", err)
+			config.G.Log.System.LogWarn("peerlist error: %s", err.Error())
 		} else {
 			// Is this peer list different from the one in current use?
 			if !cpl.peerList.IsEqual(config.G.Carbon.Listen, peers) {

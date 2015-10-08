@@ -64,13 +64,13 @@ func main() {
 	if protocol == "tcp" {
 		// Open a TCP connection to Cassabon.
 		if err := pc.OpenTCP(host, port); err != nil {
-			fmt.Printf("%v\nDid you start Cassabon?\n", err)
+			fmt.Printf("%s\nDid you start Cassabon?\n", err.Error())
 			os.Exit(1)
 		}
 	} else {
 		// Open a UDP connection to Cassabon (doesn't fail if Cassabon is not running).
 		if err := pc.OpenUDP(host, port); err != nil {
-			fmt.Printf("%v\n", err) // Must be some other error
+			fmt.Printf("%s\n", err.Error()) // Must be some other error
 			os.Exit(1)
 		}
 	}
@@ -208,7 +208,7 @@ func (pc *patientConn) Emit(format string, a ...interface{}) bool {
 	if pc.proto == "tcp" {
 		if pc.tcp.isOpen {
 			if _, err := fmt.Fprintf(pc.tcp.conn, format, a...); err != nil {
-				fmt.Printf("%v\nRetrying connection...", err)
+				fmt.Printf("%s\nRetrying connection...", err.Error())
 				pc.Close()
 			}
 		} else {

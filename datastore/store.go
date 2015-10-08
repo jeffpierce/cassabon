@@ -93,7 +93,7 @@ func (sm *StoreManager) populateSchema() {
 	conn := sm.dbClient.Pool.Pick(sm.dbClient.Query(""))
 	if err := conn.UseKeyspace(config.G.Cassandra.Keyspace); err != nil {
 		// Note: "USE <keyspace>" isn't allowed, and conn.UseKeyspace() isn't sticky.
-		config.G.Log.System.LogInfo("Keyspace not found: %v", err)
+		config.G.Log.System.LogInfo("Keyspace not found: %s", err.Error())
 		var options string
 		if len(config.G.Cassandra.CreateOpts) > 0 {
 			options = "," + config.G.Cassandra.CreateOpts
@@ -103,7 +103,7 @@ func (sm *StoreManager) populateSchema() {
 			config.G.Cassandra.Keyspace, config.G.Cassandra.Strategy, options)
 		config.G.Log.System.LogDebug(query)
 		if err := sm.dbClient.Query(query).Exec(); err != nil {
-			config.G.Log.System.LogFatal("Could not create keyspace: %v", err)
+			config.G.Log.System.LogFatal("Could not create keyspace: %s", err.Error())
 		}
 		config.G.Log.System.LogInfo("Keyspace %q created", config.G.Cassandra.Keyspace)
 	}
@@ -138,7 +138,7 @@ func (sm *StoreManager) populateSchema() {
 		config.G.Log.System.LogInfo("Creating table %q", table)
 
 		if err := sm.dbClient.Query(query).Exec(); err != nil {
-			config.G.Log.System.LogFatal("Table %q creation failed: %v", table, err)
+			config.G.Log.System.LogFatal("Table %q creation failed: %s", table, err.Error())
 		}
 	}
 }
@@ -160,8 +160,8 @@ func (sm *StoreManager) run() {
 	)
 	if err != nil {
 		// Without Cassandra client we can't do our job, so log, whine, and crash.
-		config.G.Log.System.LogFatal("StoreManager unable to connect to Cassandra at %v, port %s: %v",
-			config.G.Cassandra.Hosts, config.G.Cassandra.Port, err)
+		config.G.Log.System.LogFatal("StoreManager unable to connect to Cassandra at %v, port %s: %s",
+			config.G.Cassandra.Hosts, config.G.Cassandra.Port, err.Error())
 	}
 
 	defer sm.dbClient.Close()
@@ -364,6 +364,6 @@ func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, t
 
 	if err := sm.dbClient.Query(query, path, ts, value).Exec(); err != nil {
 		// Could not write to Cassandra cluster...we should scream loudly about this.  Possibly a failure case?.
-		config.G.Log.System.LogError("Cassandra write error: %v", err)
+		config.G.Log.System.LogError("Cassandra write error: %s", err.Error())
 	}
 }

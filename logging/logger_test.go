@@ -70,7 +70,7 @@ func TestLogger(t *testing.T) {
 
 	fp, err := os.Open(LOGFILE)
 	if err != nil {
-		t.Errorf("Unable to open test log file: %v", err)
+		t.Errorf("Unable to open test log file: %s", err.Error())
 	}
 	scanner := bufio.NewScanner(fp)
 	for scanner.Scan() {

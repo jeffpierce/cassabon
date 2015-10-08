@@ -137,7 +137,7 @@ func ValidatePeerList(localHostPort string, peers []string) error {
 
 	for _, v := range peers {
 		if _, err := net.ResolveTCPAddr("tcp4", v); err != nil {
-			return fmt.Errorf("Invalid host:port \"%s\" in peer list: %v", v, err)
+			return fmt.Errorf("Invalid host:port \"%s\" in peer list: %s", v, err.Error())
 		}
 		if v == localHostPort {
 			localHostPort = ""
@@ -270,7 +270,7 @@ func LoadRollups() {
 			if re, err := regexp.Compile(expression); err == nil {
 				rd.Expression = re
 			} else {
-				G.Log.System.LogWarn("Malformed regular expression for \"%s\": %v", expression, err)
+				G.Log.System.LogWarn("Malformed regular expression for \"%s\": %s", expression, err.Error())
 				continue
 			}
 		}

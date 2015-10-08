@@ -50,7 +50,7 @@ func (sc *StubbornTCPConn) Send(line string) {
 		// If already open or now open, send the current line.
 		if sc.isOpen {
 			if _, err := fmt.Fprintf(sc.conn, "%s\n", line); err != nil {
-				config.G.Log.System.LogWarn("Peer connection to %s failed: %v", sc.hostPort, err)
+				config.G.Log.System.LogWarn("Peer connection to %s failed: %s", sc.hostPort, err.Error())
 				sc.Close()
 			} else {
 				// The write succeeded, ensure we don't double-write.
@@ -69,7 +69,7 @@ func (sc *StubbornTCPConn) internalOpen() error {
 	} else {
 		if !sc.openFailed {
 			// Only report this once, otherwise it gets really noisy.
-			config.G.Log.System.LogWarn("Unable to make peer connection to %s: %v", sc.hostPort, err)
+			config.G.Log.System.LogWarn("Unable to make peer connection to %s: %s", sc.hostPort, err.Error())
 			sc.openFailed = true
 		}
 	}

@@ -48,8 +48,8 @@ func (indexer *MetricsIndexer) run() {
 
 	if err != nil {
 		// Without Redis client we can't do our job, so log, whine, and crash.
-		config.G.Log.System.LogFatal("Indexer unable to connect to Redis at %v: %v",
-			config.G.Redis.Addr, err)
+		config.G.Log.System.LogFatal("Indexer unable to connect to Redis at %v: %s",
+			config.G.Redis.Addr, err.Error())
 	}
 
 	defer indexer.rc.Close()
@@ -110,6 +110,6 @@ func (indexer *MetricsIndexer) processMetricPath(splitPath []string, pathLen int
 	_, err := pipe.Exec()
 	if err != nil {
 		// How do we want to degrade gracefully when this fails?
-		config.G.Log.System.LogError("Redis error: %v", err)
+		config.G.Log.System.LogError("Redis error: %s", err.Error())
 	}
 }

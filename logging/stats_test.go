@@ -8,7 +8,7 @@ func TestStats(t *testing.T) {
 
 	err := Statsd.Open("127.0.0.1", "8125", "cassabon")
 	if err != nil {
-		t.Errorf("statsd: Unexpected error opening statsd client: %v", err)
+		t.Errorf("statsd: Unexpected error opening statsd client: %s", err.Error())
 	}
 	Statsd.Close()
 

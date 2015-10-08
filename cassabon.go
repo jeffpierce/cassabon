@@ -33,7 +33,7 @@ func main() {
 
 	// Read the configuration file from disk.
 	if err := config.ReadConfigurationFile(confFile); err != nil {
-		config.G.Log.System.LogFatal("Unable to load configuration: %v", err)
+		config.G.Log.System.LogFatal("Unable to load configuration: %s", err.Error())
 	}
 	// Populate the global config with values used only once.
 	config.LoadStartupValues()
@@ -74,7 +74,7 @@ func main() {
 	// Set up stats reporting.
 	if config.G.Statsd.Host != "" {
 		if err := logging.Statsd.Open(config.G.Statsd.Host, config.G.Statsd.Port, "cassabon"); err != nil {
-			config.G.Log.System.LogError("Not reporting to statsd: %v", err)
+			config.G.Log.System.LogError("Not reporting to statsd: %s", err.Error())
 		} else {
 			config.G.Log.System.LogInfo("Reporting to statsd at %s:%s", config.G.Statsd.Host, config.G.Statsd.Port)
 		}
@@ -116,7 +116,7 @@ func main() {
 		if configIsStale {
 			config.G.Log.System.LogInfo("Reading configuration file %s", confFile)
 			if err := config.ReadConfigurationFile(confFile); err != nil {
-				config.G.Log.System.LogError("Unable to load configuration: %v", err)
+				config.G.Log.System.LogError("Unable to load configuration: %s", err.Error())
 			} else {
 				config.LoadRefreshableValues()
 				sev, _ := logging.TextToSeverity(config.G.Log.Loglevel)

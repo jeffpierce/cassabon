@@ -225,12 +225,12 @@ func (l *FileLogger) openLogfile() *os.File {
 			// The log-rotation case.
 			// Note that when rotating, the pre-rotation log is still open here.
 			// DO NOT call the public Log() method, you will cause a deadlock.
-			l.emit(Fatal, "Unable to reopen logfile '%v'. Error: '%v'", l.logFilename, err)
+			l.emit(Fatal, "Unable to reopen logfile '%v'. Error: '%s'", l.logFilename, err.Error())
 			l.logFile.Close()
 		}
 		// Inability to log is a fatal error. We do not run blind.
 		l.skipEmit = true // Message already emitted, just panic
-		l.LogFatal("Unable to reopen logfile '%v'. Error: '%v'", l.logFilename, err)
+		l.LogFatal("Unable to reopen logfile '%v'. Error: '%s'", l.logFilename, err.Error())
 	}
 
 	return fp
