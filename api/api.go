@@ -39,8 +39,8 @@ func (api *CassabonAPI) run() {
 
 	// Define routes
 	api.server.Get("/", api.rootHandler)
-	api.server.Get("/paths", api.pathsHandler)
-	api.server.Get("/metrics", api.metricsHandler)
+	api.server.Get("/paths", api.getPathHandler)
+	api.server.Get("/metrics", api.getMetricHandler)
 	api.server.Get("/healthcheck", api.healthHandler)
 	api.server.Delete("/remove/path/:path", api.deletePathHandler)
 	api.server.Delete("/remove/metric/:metric", api.deleteMetricHandler)
@@ -52,8 +52,46 @@ func (api *CassabonAPI) run() {
 	graceful.ListenAndServe(api.hostPort, api.server)
 }
 
-// pathsHandler processes requests like "GET /paths?query=foo".
-func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
+// notFoundHandler is the global 404 handler, used by Goji.
+func (api *CassabonAPI) notFoundHandler(w http.ResponseWriter, r *http.Request) {
+	api.sendErrorResponse(w, http.StatusNotFound, "not found", r.RequestURI)
+}
+
+// healthHandler responds with either ALIVE or DEAD, for use by the load balancer.
+func (api *CassabonAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
+
+	// We are alive, unless the healthcheck file says we are dead.
+	var alive bool = true
+
+	if health, err := ioutil.ReadFile(config.G.API.HealthCheckFile); err == nil {
+		if strings.ToUpper(strings.TrimSpace(string(health))) == "DEAD" {
+			alive = false
+		}
+	}
+
+	if alive {
+		fmt.Fprint(w, "ALIVE")
+	} else {
+		fmt.Fprint(w, "DEAD")
+	}
+}
+
+// rootHandler provides information about the application, served from "/".
+func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
+	resp := struct {
+		Message string `json:"message"`
+		Github  string `json:"github"`
+		Version string `json:"version"`
+	}{}
+	resp.Message = "Cassabon.  You know, for stats!"
+	resp.Github = "https://github.com/jeffpierce/cassabon"
+	resp.Version = config.Version
+	jsonText, _ := json.Marshal(resp)
+	w.Write(jsonText)
+}
+
+// getPathHandler processes requests like "GET /paths?query=foo".
+func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
 	ch := make(chan config.DataQueryResponse)
@@ -87,8 +125,14 @@ func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 	api.sendResponse(w, resp)
 }
 
-// metricsHandler processes requests like "GET /metrics?query=foo".
-func (api *CassabonAPI) metricsHandler(w http.ResponseWriter, r *http.Request) {
+// deletePathHandler removes paths from the index store.
+func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *http.Request) {
+	// TODO:  Implement this in datastore.  c.URLParams["path"]
+	api.sendErrorResponse(w, http.StatusNotImplemented, "not implemented", "")
+}
+
+// getMetricHandler processes requests like "GET /metrics?query=foo".
+func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
 	ch := make(chan config.DataQueryResponse)
@@ -122,46 +166,10 @@ func (api *CassabonAPI) metricsHandler(w http.ResponseWriter, r *http.Request) {
 	api.sendResponse(w, resp)
 }
 
-// healthHandler responds with either ALIVE or DEAD, for use by the load balancer.
-func (api *CassabonAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
-
-	// We are alive, unless the healthcheck file says we are dead.
-	var alive bool = true
-
-	if health, err := ioutil.ReadFile(config.G.API.HealthCheckFile); err == nil {
-		if strings.ToUpper(strings.TrimSpace(string(health))) == "DEAD" {
-			alive = false
-		}
-	}
-
-	if alive {
-		fmt.Fprint(w, "ALIVE")
-	} else {
-		fmt.Fprint(w, "DEAD")
-	}
-}
-
-func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *http.Request) {
-	// TODO:  Implement this in datastore.  c.URLParams["path"]
-	api.sendErrorResponse(w, http.StatusNotImplemented, "not implemented", "")
-}
-
+// deleteMetricHandler removes data from the metrics store.
 func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *http.Request) {
 	// TODO:  Implement this in datastore.  c.URLParams["metric"]
 	api.sendErrorResponse(w, http.StatusNotImplemented, "not implemented", "")
-}
-
-func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
-	resp := struct {
-		Message string `json:"message"`
-		Github  string `json:"github"`
-		Version string `json:"version"`
-	}{}
-	resp.Message = "Cassabon.  You know, for stats!"
-	resp.Github = "https://github.com/jeffpierce/cassabon"
-	resp.Version = config.Version
-	jsonText, _ := json.Marshal(resp)
-	w.Write(jsonText)
 }
 
 func (api *CassabonAPI) sendResponse(w http.ResponseWriter, resp config.DataQueryResponse) {
@@ -196,8 +204,4 @@ func (api *CassabonAPI) sendErrorResponse(w http.ResponseWriter, status int, tex
 
 	w.WriteHeader(status)
 	w.Write(jsonText)
-}
-
-func (api *CassabonAPI) notFoundHandler(w http.ResponseWriter, r *http.Request) {
-	api.sendErrorResponse(w, http.StatusNotFound, "not found", r.RequestURI)
 }
