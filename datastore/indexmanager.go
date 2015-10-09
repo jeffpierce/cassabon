@@ -128,6 +128,16 @@ func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLea
 
 // query returns the data matched by the supplied query.
 func (im *IndexManager) query(q config.DataQuery) {
+	switch strings.ToLower(q.Method) {
+	case "delete":
+		// TODO
+	default:
+		im.queryGET(q)
+	}
+}
+
+// query returns the data matched by the supplied query.
+func (im *IndexManager) queryGET(q config.DataQuery) {
 
 	config.G.Log.System.LogDebug("IndexManager::query %v", q.Query)
 

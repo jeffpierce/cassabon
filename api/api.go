@@ -60,7 +60,7 @@ func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
-	q := config.DataQuery{r.Form.Get("query"), ch}
+	q := config.DataQuery{r.Method, r.Form.Get("query"), ch}
 	config.G.Log.System.LogDebug("Received query: %s", q.Query)
 
 	// Forward the query.
@@ -95,7 +95,7 @@ func (api *CassabonAPI) metricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
-	q := config.DataQuery{r.Form.Get("query"), ch}
+	q := config.DataQuery{r.Method, r.Form.Get("query"), ch}
 	config.G.Log.System.LogDebug("Received query: %s", q.Query)
 
 	// Forward the query.

@@ -27,6 +27,7 @@ const (
 )
 
 type DataQuery struct {
+	Method  string                 // The HTTP method from the request
 	Query   string                 // Query
 	Channel chan DataQueryResponse // Channel to send response back on.
 }
