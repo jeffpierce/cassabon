@@ -79,31 +79,48 @@ func (gopher *StatPathGopher) run() {
 	}
 }
 
+// query returns the data matched by the supplied query.
 func (gopher *StatPathGopher) query(q config.IndexQuery) {
+
 	config.G.Log.System.LogDebug("Gopher::query %v", q.Query)
 
-	// Listen to the channel, get string query.
-	statQuery := q.Query
-
-	if statQuery == "" {
+	// Query particulars are mandatory.
+	if q.Query == "" {
 		q.Channel <- config.IndexQueryResponse{config.IQS_BADREQUEST, "no query specified", []byte{}}
 		return
 	}
 
 	// Split it since we need the node length for the Redis Query
-	queryNodes := strings.Split(statQuery, ".")
+	queryNodes := strings.Split(q.Query, ".")
 
 	// Split on wildcards.
-	splitWild := strings.Split(statQuery, "*")
+	splitWild := strings.Split(q.Query, "*")
 
 	// Determine if we need a simple query or a complex one.
 	// len(splitWild) == 2 and splitWild[1] == "" means we have an ending wildcard only.
+	var resp config.IndexQueryResponse
 	if len(splitWild) == 1 {
-		q.Channel <- gopher.noWild(statQuery, len(queryNodes))
+		resp = gopher.noWild(q.Query, len(queryNodes))
 	} else if len(splitWild) == 2 && splitWild[1] == "" {
-		q.Channel <- gopher.simpleWild(splitWild[0], len(queryNodes))
+		resp = gopher.simpleWild(splitWild[0], len(queryNodes))
 	} else {
-		q.Channel <- gopher.complexWild(splitWild, len(queryNodes))
+		resp = gopher.complexWild(splitWild, len(queryNodes))
+	}
+
+	// If the API gave up on us because we took too long, writing to the channel
+	// will cause first a data race, and then a panic (write on closed channel).
+	// We check, but if we lose a race we will need to recover.
+	defer func() {
+		_ = recover()
+	}()
+
+	// Check whether the channel is closed before attempting a write.
+	select {
+	case <-q.Channel:
+		// Immediate return means channel is closed (we know there is no data in it).
+	default:
+		// If the channel would have blocked, it is open, we can write to it.
+		q.Channel <- resp
 	}
 }
 

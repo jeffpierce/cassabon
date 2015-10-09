@@ -55,23 +55,39 @@ func (api *CassabonAPI) run() {
 // pathsHandler processes requests like "GET /paths?query=foo".
 func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 
-	// Create channel for use in communicating with the statGopher
+	// Create the channel on which the response will be received.
 	ch := make(chan config.IndexQueryResponse)
 
-	// Extract the query, and build the query to be sent to the indexer.
+	// Extract the query from the request URI.
 	_ = r.ParseForm()
-	pathQuery := config.IndexQuery{r.Form.Get("query"), ch}
-	config.G.Log.System.LogDebug("Received query: %s", pathQuery.Query)
+	q := config.IndexQuery{r.Form.Get("query"), ch}
+	config.G.Log.System.LogDebug("Received query: %s", q.Query)
 
-	// Pass on the query, and read the response.
-	config.G.Channels.Gopher <- pathQuery
-	resp := <-pathQuery.Channel
-	close(pathQuery.Channel)
+	// Forward the query.
+	select {
+	case config.G.Channels.Gopher <- q:
+	default:
+		config.G.Log.System.LogWarn(
+			"Index query discarded, Gopher channel is full (max %d entries)",
+			config.G.Channels.GopherChanLen)
+	}
+
+	// Read the response.
+	var resp config.IndexQueryResponse
+	select {
+	case resp = <-q.Channel:
+		// Nothing, we have our response.
+	case <-time.After(time.Second):
+		// The query died or wedged; simulate a timeout response.
+		resp = config.IndexQueryResponse{config.IQS_ERROR, "query timed out", []byte{}}
+	}
+	close(q.Channel)
 
 	// Send the response to the client.
 	api.sendResponse(w, resp)
 }
 
+// metricsHandler processes requests like "GET /metrics?query=foo".
 func (api *CassabonAPI) metricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
