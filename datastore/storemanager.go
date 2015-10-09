@@ -371,7 +371,7 @@ func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, t
 }
 
 // query returns the data matched by the supplied query.
-func (gopher *StoreManager) query(q config.IndexQuery) {
+func (sm *StoreManager) query(q config.IndexQuery) {
 
 	config.G.Log.System.LogDebug("StoreManager::query %v", q.Query)
 
