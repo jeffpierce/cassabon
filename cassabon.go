@@ -96,12 +96,12 @@ func main() {
 
 	// Create and initialize the internal modules.
 	storeManager := new(datastore.StoreManager)
-	statIndexer := new(datastore.MetricsIndexer)
-	statGopher := new(datastore.StatPathGopher)
+	indexManager := new(datastore.IndexManager)
+	//statGopher := new(datastore.StatPathGopher)
 	carbonListener := new(listener.CarbonPlaintextListener)
 	storeManager.Init()
-	statIndexer.Init()
-	statGopher.Init()
+	indexManager.Init()
+	//statGopher.Init()
 	carbonListener.Init()
 
 	// Repeat until terminated by SIGINT/SIGTERM.
@@ -127,8 +127,8 @@ func main() {
 
 		// Start the internal modules, Carbon listener last.
 		storeManager.Start()
-		statIndexer.Start()
-		statGopher.Start()
+		indexManager.Start()
+		//statGopher.Start()
 		carbonListener.Start()
 
 		// Start Cassabon Web API
