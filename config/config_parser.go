@@ -22,8 +22,9 @@ type CassabonConfig struct {
 	Statsd   StatsdSettings
 	Channels struct {
 		DataStoreChanLen  int // Length of the DataStore channel
-		IndexStoreChanLen int // Length of the Indexer channel
-		GopherChanLen     int // Length of the StatGopher channel
+		DataFetchChanLen  int // Length of the DataFetch channel
+		IndexStoreChanLen int // Length of the IndexStore channel
+		IndexFetchChanLen int // Length of the IndexFetch channel
 	}
 	Carbon struct {
 		Listen     string // ip:port on which to listen for Carbon stats
@@ -116,6 +117,13 @@ func LoadStartupValues() {
 	if G.Channels.DataStoreChanLen > 1000 {
 		G.Channels.DataStoreChanLen = 1000
 	}
+	G.Channels.DataFetchChanLen = rawCassabonConfig.Channels.DataFetchChanLen
+	if G.Channels.DataFetchChanLen < 10 {
+		G.Channels.DataFetchChanLen = 10
+	}
+	if G.Channels.DataFetchChanLen > 1000 {
+		G.Channels.DataFetchChanLen = 1000
+	}
 	G.Channels.IndexStoreChanLen = rawCassabonConfig.Channels.IndexStoreChanLen
 	if G.Channels.IndexStoreChanLen < 10 {
 		G.Channels.IndexStoreChanLen = 10
@@ -123,12 +131,12 @@ func LoadStartupValues() {
 	if G.Channels.IndexStoreChanLen > 1000 {
 		G.Channels.IndexStoreChanLen = 1000
 	}
-	G.Channels.GopherChanLen = rawCassabonConfig.Channels.GopherChanLen
-	if G.Channels.GopherChanLen < 10 {
-		G.Channels.GopherChanLen = 10
+	G.Channels.IndexFetchChanLen = rawCassabonConfig.Channels.IndexFetchChanLen
+	if G.Channels.IndexFetchChanLen < 10 {
+		G.Channels.IndexFetchChanLen = 10
 	}
-	if G.Channels.GopherChanLen > 1000 {
-		G.Channels.GopherChanLen = 1000
+	if G.Channels.IndexFetchChanLen > 1000 {
+		G.Channels.IndexFetchChanLen = 1000
 	}
 }
 

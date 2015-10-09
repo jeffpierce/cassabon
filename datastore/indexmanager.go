@@ -1,4 +1,3 @@
-// Datastore implements workers that work with the Redis Index and Cassandra Metric datastores
 package datastore
 
 import (
@@ -14,10 +13,6 @@ import (
 	"github.com/jeffpierce/cassabon/middleware"
 )
 
-type StatPathGopher struct {
-	rc *redis.Client // Redis client connection
-}
-
 // MetricResponse defines the individual elements returned as an array by "GET /paths".
 type MetricResponse struct {
 	Path   string `json:"path"`
@@ -26,31 +21,35 @@ type MetricResponse struct {
 	Leaf   bool   `json:"leaf"`
 }
 
-func (gopher *StatPathGopher) Init() {
+type IndexManager struct {
+	rc *redis.Client
 }
 
-func (gopher *StatPathGopher) Start() {
+func (im *IndexManager) Init() {
+}
+
+func (im *IndexManager) Start() {
 	config.G.OnReload2WG.Add(1)
-	go gopher.run()
+	go im.run()
 }
 
-func (gopher *StatPathGopher) run() {
+func (im *IndexManager) run() {
 
 	defer config.G.OnPanic()
 
-	// Initalize Redis client pool.
+	// Initialize Redis client pool.
 	var err error
 	if config.G.Redis.Sentinel {
-		config.G.Log.System.LogDebug("Gopher initializing Redis client (Sentinel)")
-		gopher.rc, err = middleware.RedisFailoverClient(
+		config.G.Log.System.LogDebug("IndexManager initializing Redis client (Sentinel)")
+		im.rc, err = middleware.RedisFailoverClient(
 			config.G.Redis.Addr,
 			config.G.Redis.Pwd,
 			config.G.Redis.Master,
 			config.G.Redis.DB,
 		)
 	} else {
-		config.G.Log.System.LogDebug("Gopher initializing Redis client")
-		gopher.rc, err = middleware.RedisClient(
+		config.G.Log.System.LogDebug("IndexManager initializing Redis client")
+		im.rc, err = middleware.RedisClient(
 			config.G.Redis.Addr,
 			config.G.Redis.Pwd,
 			config.G.Redis.DB,
@@ -59,56 +58,121 @@ func (gopher *StatPathGopher) run() {
 
 	if err != nil {
 		// Without Redis client we can't do our job, so log, whine, and crash.
-		config.G.Log.System.LogFatal("Gopher unable to connect to Redis at %v: %s",
+		config.G.Log.System.LogFatal("IndexManager unable to connect to Redis at %v: %s",
 			config.G.Redis.Addr, err.Error())
 	}
 
-	defer gopher.rc.Close()
-	config.G.Log.System.LogDebug("Gopher Redis client initialized")
+	defer im.rc.Close()
+	config.G.Log.System.LogDebug("IndexManager Redis client initialized")
 
-	// Wait for queries to arrive, and process them.
+	// Wait for entries to arrive, and process them.
 	for {
 		select {
 		case <-config.G.OnReload2:
-			config.G.Log.System.LogDebug("Gopher::run received QUIT message")
+			config.G.Log.System.LogDebug("IndexManager::run received QUIT message")
 			config.G.OnReload2WG.Done()
 			return
-		case gopherQuery := <-config.G.Channels.Gopher:
-			go gopher.query(gopherQuery)
+		case metric := <-config.G.Channels.IndexStore:
+			im.index(metric.Path)
+		case query := <-config.G.Channels.IndexFetch:
+			go im.query(query)
 		}
 	}
 }
 
-func (gopher *StatPathGopher) query(q config.IndexQuery) {
-	config.G.Log.System.LogDebug("Gopher::query %v", q.Query)
+// IndexMetricPath takes a metric path string and redis client, starts a pipeline, splits the metric,
+// and sends it off to be processed by processMetricPath().
+func (im *IndexManager) index(path string) {
+	config.G.Log.System.LogDebug("IndexManager::index path=%s", path)
+	splitPath := strings.Split(path, ".")
+	im.processMetricPath(splitPath, len(splitPath), true)
+}
 
-	// Listen to the channel, get string query.
-	statQuery := q.Query
+// processMetricPath recursively indexes the metric path via the redis pipeline.
+func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLeaf bool) {
+	// Process the metric path one node at a time.  We store metrics in Redis as a sorted set with score
+	// 0 so that lexicographical search works.  Metrics are in the format of:
+	//
+	// big_endian_length:metric.path:true_or_false
+	//
+	// This keeps them ordered so that a ZRANGEBYLEX works when finding the next nodes in a path branch.
 
-	if statQuery == "" {
+	pipe := im.rc.Pipeline()
+
+	for pathLen > 0 {
+
+		// Construct the metric string
+		metricPath := strings.Join([]string{
+			ToBigEndianString(pathLen),
+			strings.Join(splitPath, "."),
+			strconv.FormatBool(isLeaf)}, ":")
+		config.G.Log.System.LogDebug("IndexManager indexing \"%s\"", metricPath)
+
+		z := redis.Z{0, metricPath}
+
+		// Put it in the pipeline.
+		pipe.ZAdd(config.G.Redis.PathKeyname, z)
+
+		// Pop the last node of the metric off, set isLeaf to false, and resume loop.
+		_, splitPath = splitPath[len(splitPath)-1], splitPath[:len(splitPath)-1]
+		isLeaf = false
+		pathLen = len(splitPath)
+	}
+
+	_, err := pipe.Exec()
+	if err != nil {
+		// How do we want to degrade gracefully when this fails?
+		config.G.Log.System.LogError("Redis error: %s", err.Error())
+	}
+}
+
+// query returns the data matched by the supplied query.
+func (im *IndexManager) query(q config.IndexQuery) {
+
+	config.G.Log.System.LogDebug("IndexManager::query %v", q.Query)
+
+	// Query particulars are mandatory.
+	if q.Query == "" {
 		q.Channel <- config.IndexQueryResponse{config.IQS_BADREQUEST, "no query specified", []byte{}}
 		return
 	}
 
 	// Split it since we need the node length for the Redis Query
-	queryNodes := strings.Split(statQuery, ".")
+	queryNodes := strings.Split(q.Query, ".")
 
 	// Split on wildcards.
-	splitWild := strings.Split(statQuery, "*")
+	splitWild := strings.Split(q.Query, "*")
 
 	// Determine if we need a simple query or a complex one.
 	// len(splitWild) == 2 and splitWild[1] == "" means we have an ending wildcard only.
+	var resp config.IndexQueryResponse
 	if len(splitWild) == 1 {
-		q.Channel <- gopher.noWild(statQuery, len(queryNodes))
+		resp = im.noWild(q.Query, len(queryNodes))
 	} else if len(splitWild) == 2 && splitWild[1] == "" {
-		q.Channel <- gopher.simpleWild(splitWild[0], len(queryNodes))
+		resp = im.simpleWild(splitWild[0], len(queryNodes))
 	} else {
-		q.Channel <- gopher.complexWild(splitWild, len(queryNodes))
+		resp = im.complexWild(splitWild, len(queryNodes))
+	}
+
+	// If the API gave up on us because we took too long, writing to the channel
+	// will cause first a data race, and then a panic (write on closed channel).
+	// We check, but if we lose a race we will need to recover.
+	defer func() {
+		_ = recover()
+	}()
+
+	// Check whether the channel is closed before attempting a write.
+	select {
+	case <-q.Channel:
+		// Immediate return means channel is closed (we know there is no data in it).
+	default:
+		// If the channel would have blocked, it is open, we can write to it.
+		q.Channel <- resp
 	}
 }
 
 // getMax returns the max range parameter for a ZRANGEBYLEX.
-func (gopher *StatPathGopher) getMax(s string) string {
+func (im *IndexManager) getMax(s string) string {
 
 	var max string
 
@@ -124,13 +188,13 @@ func (gopher *StatPathGopher) getMax(s string) string {
 }
 
 // noWild performs fetches for strings with no wildcard characters.
-func (gopher *StatPathGopher) noWild(q string, l int) config.IndexQueryResponse {
+func (im *IndexManager) noWild(q string, l int) config.IndexQueryResponse {
 
 	// No wild card means we should be retrieving one stat, or none at all.
 	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", q, ":"}, "")
-	queryStringMax := gopher.getMax(queryString)
+	queryStringMax := im.getMax(queryString)
 
-	resp, err := gopher.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
+	resp, err := im.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
 		queryString, queryStringMax, 0, 0,
 	}).Result()
 
@@ -143,19 +207,19 @@ func (gopher *StatPathGopher) noWild(q string, l int) config.IndexQueryResponse 
 		return config.IndexQueryResponse{config.IQS_OK, "", []byte{'[', ']'}}
 	}
 
-	return config.IndexQueryResponse{config.IQS_OK, "", gopher.processQueryResults(resp, l)}
+	return config.IndexQueryResponse{config.IQS_OK, "", im.processQueryResults(resp, l)}
 }
 
 // simpleWild performs fetches for strings with one wildcard char, in the last position.
-func (gopher *StatPathGopher) simpleWild(q string, l int) config.IndexQueryResponse {
+func (im *IndexManager) simpleWild(q string, l int) config.IndexQueryResponse {
 
 	// Queries with an ending wild card only are easy, as the response from
 	// ZRANGEBYLEX <key> [bigE_len:path [bigE_len:path\xff is the answer.
 	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", q}, "")
-	queryStringMax := gopher.getMax(queryString)
+	queryStringMax := im.getMax(queryString)
 
 	// Perform the query.
-	resp, err := gopher.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
+	resp, err := im.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
 		queryString, queryStringMax, 0, 0,
 	}).Result()
 
@@ -168,23 +232,23 @@ func (gopher *StatPathGopher) simpleWild(q string, l int) config.IndexQueryRespo
 		return config.IndexQueryResponse{config.IQS_OK, "", []byte{'[', ']'}}
 	}
 
-	return config.IndexQueryResponse{config.IQS_OK, "", gopher.processQueryResults(resp, l)}
+	return config.IndexQueryResponse{config.IQS_OK, "", im.processQueryResults(resp, l)}
 }
 
 // complexWild performs fetches for strings with multiple wildcard characters.
-func (gopher *StatPathGopher) complexWild(splitWild []string, l int) config.IndexQueryResponse {
+func (im *IndexManager) complexWild(splitWild []string, l int) config.IndexQueryResponse {
 
 	// Resolve multiple wildcards by pulling in the nodes with length l that start with
 	// the first part of the non-wildcard, then filter that set with a regex match.
 	var matches []string
 
 	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", splitWild[0]}, "")
-	queryStringMax := gopher.getMax(queryString)
+	queryStringMax := im.getMax(queryString)
 
 	config.G.Log.System.LogDebug(
 		"complexWild querying redis with %s, %s as range", queryString, queryStringMax)
 
-	resp, err := gopher.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
+	resp, err := im.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
 		queryString, queryStringMax, 0, 0,
 	}).Result()
 
@@ -218,7 +282,7 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) config.Inde
 	}
 
 	if len(matches) > 0 {
-		return config.IndexQueryResponse{config.IQS_OK, "", gopher.processQueryResults(matches, l)}
+		return config.IndexQueryResponse{config.IQS_OK, "", im.processQueryResults(matches, l)}
 	} else {
 		// Return an empty array.
 		return config.IndexQueryResponse{config.IQS_OK, "", []byte{'[', ']'}}
@@ -226,7 +290,7 @@ func (gopher *StatPathGopher) complexWild(splitWild []string, l int) config.Inde
 }
 
 // processQueryResults converts the results to JSON text.
-func (gopher *StatPathGopher) processQueryResults(results []string, l int) []byte {
+func (im *IndexManager) processQueryResults(results []string, l int) []byte {
 
 	var responseList []MetricResponse
 

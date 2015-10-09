@@ -1,10 +1,6 @@
 logging:
     logdir: ""
     loglevel: "info"
-carbon:
-    address: "127.0.0.1"
-    port: 2003
-    protocol: "tcp"
 statsd:
     host: "127.0.0.1"
     port: 8125
@@ -17,31 +13,35 @@ statsd:
             samplerate: 1.0
 channels:
     datastorechanlen: 10
+    datafetchchanlen: 10
     indexstorechanlen: 10
-    gopherchanlen: 100
-api:
-    address: "127.0.0.1"
-    port: 8080
-    healthcheckfile: "config/healthcheckfile"
-parameters:
-    listener:
+    indexfetchchanlen: 10
+carbon:
+    listen: "127.0.0.1:2003"
+    protocol: "tcp"
+    parameters:
         tcptimeout: 5
         udptimeout: 5
+    peers:
+        - "127.0.0.1:2003"
+api:
+    listen: "127.0.0.1:8080"
+    healthcheckfile: "config/healthcheckfile"
+cassandra:
+    hosts:
+        - "127.0.0.1"
+    port: 9042
+    keyspace: "cassabon_dev"
+    strategy: "SimpleStrategy"
+    createopts: "'replication_factor':1"
 redis:
-    index:
-        addr:
-            - "127.0.0.1:6379"
-        db: 5
-        pwd: ""
-        sentinel: false
-        master: ""
-    queue:
-        addr:
-            - "127.0.0.1:6379"
-        db: 6
-        pwd: ""
-        sentinel: false
-        master: ""
+    addr:
+        - "127.0.0.1:6379"
+    db: 5
+    pwd: ""
+    pathkeyname: "cassabon_dev"
+    sentinel: false
+    master: ""
 rollups:
   ^foo.*:
     retention:

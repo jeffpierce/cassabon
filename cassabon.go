@@ -90,17 +90,16 @@ func main() {
 	config.G.OnPeerChangeRsp = make(chan struct{}, 1)
 	config.G.OnExit = make(chan struct{}, 1)
 	config.G.Channels.DataStore = make(chan config.CarbonMetric, config.G.Channels.DataStoreChanLen)
+	config.G.Channels.DataFetch = make(chan config.IndexQuery, config.G.Channels.DataFetchChanLen)
 	config.G.Channels.IndexStore = make(chan config.CarbonMetric, config.G.Channels.IndexStoreChanLen)
-	config.G.Channels.Gopher = make(chan config.IndexQuery, config.G.Channels.GopherChanLen)
+	config.G.Channels.IndexFetch = make(chan config.IndexQuery, config.G.Channels.IndexFetchChanLen)
 
 	// Create and initialize the internal modules.
 	storeManager := new(datastore.StoreManager)
-	statIndexer := new(datastore.MetricsIndexer)
-	statGopher := new(datastore.StatPathGopher)
+	indexManager := new(datastore.IndexManager)
 	carbonListener := new(listener.CarbonPlaintextListener)
 	storeManager.Init()
-	statIndexer.Init()
-	statGopher.Init()
+	indexManager.Init()
 	carbonListener.Init()
 
 	// Repeat until terminated by SIGINT/SIGTERM.
@@ -126,8 +125,7 @@ func main() {
 
 		// Start the internal modules, Carbon listener last.
 		storeManager.Start()
-		statIndexer.Start()
-		statGopher.Start()
+		indexManager.Start()
 		carbonListener.Start()
 
 		// Start Cassabon Web API

@@ -85,14 +85,16 @@ type Globals struct {
 	OnReload2WG     sync.WaitGroup
 	OnExitWG        sync.WaitGroup
 
-	// Channels for sending metrics between modules.
+	// Channels for communicating between modules.
 	Channels struct {
 		DataStore         chan CarbonMetric
 		DataStoreChanLen  int
+		DataFetch         chan IndexQuery
+		DataFetchChanLen  int
 		IndexStore        chan CarbonMetric
 		IndexStoreChanLen int
-		Gopher            chan IndexQuery
-		GopherChanLen     int
+		IndexFetch        chan IndexQuery
+		IndexFetchChanLen int
 	}
 
 	// Logger configuration and runtime properties.
