@@ -40,7 +40,7 @@ func (im *IndexManager) run() {
 	// Initialize Redis client pool.
 	var err error
 	if config.G.Redis.Sentinel {
-		config.G.Log.System.LogDebug("Indexer initializing Redis client (Sentinel)")
+		config.G.Log.System.LogDebug("IndexManager initializing Redis client (Sentinel)")
 		im.rc, err = middleware.RedisFailoverClient(
 			config.G.Redis.Addr,
 			config.G.Redis.Pwd,
@@ -48,7 +48,7 @@ func (im *IndexManager) run() {
 			config.G.Redis.DB,
 		)
 	} else {
-		config.G.Log.System.LogDebug("Indexer initializing Redis client")
+		config.G.Log.System.LogDebug("IndexManager initializing Redis client")
 		im.rc, err = middleware.RedisClient(
 			config.G.Redis.Addr,
 			config.G.Redis.Pwd,
@@ -58,18 +58,18 @@ func (im *IndexManager) run() {
 
 	if err != nil {
 		// Without Redis client we can't do our job, so log, whine, and crash.
-		config.G.Log.System.LogFatal("Indexer unable to connect to Redis at %v: %s",
+		config.G.Log.System.LogFatal("IndexManager unable to connect to Redis at %v: %s",
 			config.G.Redis.Addr, err.Error())
 	}
 
 	defer im.rc.Close()
-	config.G.Log.System.LogDebug("Indexer Redis client initialized")
+	config.G.Log.System.LogDebug("IndexManager Redis client initialized")
 
 	// Wait for entries to arrive, and process them.
 	for {
 		select {
 		case <-config.G.OnReload2:
-			config.G.Log.System.LogDebug("Indexer::run received QUIT message")
+			config.G.Log.System.LogDebug("IndexManager::run received QUIT message")
 			config.G.OnReload2WG.Done()
 			return
 		case metric := <-config.G.Channels.IndexStore:
@@ -83,7 +83,7 @@ func (im *IndexManager) run() {
 // IndexMetricPath takes a metric path string and redis client, starts a pipeline, splits the metric,
 // and sends it off to be processed by processMetricPath().
 func (im *IndexManager) index(path string) {
-	config.G.Log.System.LogDebug("Indexer::index path=%s", path)
+	config.G.Log.System.LogDebug("IndexManager::index path=%s", path)
 	splitPath := strings.Split(path, ".")
 	im.processMetricPath(splitPath, len(splitPath), true)
 }
@@ -106,7 +106,7 @@ func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLea
 			ToBigEndianString(pathLen),
 			strings.Join(splitPath, "."),
 			strconv.FormatBool(isLeaf)}, ":")
-		config.G.Log.System.LogDebug("Indexer indexing \"%s\"", metricPath)
+		config.G.Log.System.LogDebug("IndexManager indexing \"%s\"", metricPath)
 
 		z := redis.Z{0, metricPath}
 
@@ -129,7 +129,7 @@ func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLea
 // query returns the data matched by the supplied query.
 func (im *IndexManager) query(q config.IndexQuery) {
 
-	config.G.Log.System.LogDebug("Gopher::query %v", q.Query)
+	config.G.Log.System.LogDebug("IndexManager::query %v", q.Query)
 
 	// Query particulars are mandatory.
 	if q.Query == "" {
