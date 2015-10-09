@@ -22,6 +22,7 @@ type CassabonConfig struct {
 	Statsd   StatsdSettings
 	Channels struct {
 		DataStoreChanLen  int // Length of the DataStore channel
+		DataFetchChanLen  int // Length of the DataFetch channel
 		IndexStoreChanLen int // Length of the Indexer channel
 		GopherChanLen     int // Length of the StatGopher channel
 	}
@@ -115,6 +116,13 @@ func LoadStartupValues() {
 	}
 	if G.Channels.DataStoreChanLen > 1000 {
 		G.Channels.DataStoreChanLen = 1000
+	}
+	G.Channels.DataFetchChanLen = rawCassabonConfig.Channels.DataFetchChanLen
+	if G.Channels.DataFetchChanLen < 10 {
+		G.Channels.DataFetchChanLen = 10
+	}
+	if G.Channels.DataFetchChanLen > 1000 {
+		G.Channels.DataFetchChanLen = 1000
 	}
 	G.Channels.IndexStoreChanLen = rawCassabonConfig.Channels.IndexStoreChanLen
 	if G.Channels.IndexStoreChanLen < 10 {

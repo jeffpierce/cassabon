@@ -184,6 +184,8 @@ func (sm *StoreManager) run() {
 			return
 		case metric := <-config.G.Channels.DataStore:
 			sm.accumulate(metric)
+		case query := <-config.G.Channels.DataFetch:
+			go sm.query(query)
 		case <-sm.timeout:
 			sm.flush(false)
 		}
@@ -365,5 +367,40 @@ func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, t
 	if err := sm.dbClient.Query(query, path, ts, value).Exec(); err != nil {
 		// Could not write to Cassandra cluster...we should scream loudly about this.  Possibly a failure case?.
 		config.G.Log.System.LogError("Cassandra write error: %s", err.Error())
+	}
+}
+
+// query returns the data matched by the supplied query.
+func (gopher *StoreManager) query(q config.IndexQuery) {
+
+	config.G.Log.System.LogDebug("StoreManager::query %v", q.Query)
+
+	// Query particulars are mandatory.
+	if q.Query == "" {
+		q.Channel <- config.IndexQueryResponse{config.IQS_BADREQUEST, "no query specified", []byte{}}
+		return
+	}
+
+	var resp config.IndexQueryResponse
+
+	// TODO: Build the query response.
+	resp = config.IndexQueryResponse{config.IQS_OK, "", []byte{'[', ']'}}
+
+	// For testing: time.Sleep(time.Second * 2)
+
+	// If the API gave up on us because we took too long, writing to the channel
+	// will cause first a data race, and then a panic (write on closed channel).
+	// We check, but if we lose a race we will need to recover.
+	defer func() {
+		_ = recover()
+	}()
+
+	// Check whether the channel is closed before attempting a write.
+	select {
+	case <-q.Channel:
+		// Immediate return means channel is closed (we know there is no data in it).
+	default:
+		// If the channel would have blocked, it is open, we can write to it.
+		q.Channel <- resp
 	}
 }

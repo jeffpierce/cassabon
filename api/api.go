@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/zenazn/goji/graceful"
 	"github.com/zenazn/goji/web"
@@ -68,23 +69,41 @@ func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 	close(pathQuery.Channel)
 
 	// Send the response to the client.
-	switch resp.Status {
-	case config.IQS_OK:
-		w.Write(resp.Payload)
-	case config.IQS_NOCONTENT:
-		w.WriteHeader(http.StatusNoContent)
-	case config.IQS_NOTFOUND:
-		api.sendErrorResponse(w, http.StatusNotFound, "not found", resp.Message)
-	case config.IQS_BADREQUEST:
-		api.sendErrorResponse(w, http.StatusBadRequest, "bad request", resp.Message)
-	case config.IQS_ERROR:
-		api.sendErrorResponse(w, http.StatusInternalServerError, "internal error", resp.Message)
-	}
+	api.sendResponse(w, resp)
 }
 
 func (api *CassabonAPI) metricsHandler(w http.ResponseWriter, r *http.Request) {
-	// TODO: Have to wait for the Cassandra worker to get implemented.
-	api.sendErrorResponse(w, http.StatusNotImplemented, "not implemented", "")
+
+	// Create the channel on which the response will be received.
+	ch := make(chan config.IndexQueryResponse)
+
+	// Extract the query from the request URI.
+	_ = r.ParseForm()
+	q := config.IndexQuery{r.Form.Get("query"), ch}
+	config.G.Log.System.LogDebug("Received query: %s", q.Query)
+
+	// Forward the query.
+	select {
+	case config.G.Channels.DataFetch <- q:
+	default:
+		config.G.Log.System.LogWarn(
+			"Metrics query discarded, DataFetch channel is full (max %d entries)",
+			config.G.Channels.DataFetchChanLen)
+	}
+
+	// Read the response.
+	var resp config.IndexQueryResponse
+	select {
+	case resp = <-q.Channel:
+		// Nothing, we have our response.
+	case <-time.After(time.Second):
+		// The query died or wedged; simulate a timeout response.
+		resp = config.IndexQueryResponse{config.IQS_ERROR, "query timed out", []byte{}}
+	}
+	close(q.Channel)
+
+	// Send the response to the client.
+	api.sendResponse(w, resp)
 }
 
 // healthHandler responds with either ALIVE or DEAD, for use by the load balancer.
@@ -127,6 +146,21 @@ func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
 	resp.Version = config.Version
 	jsonText, _ := json.Marshal(resp)
 	w.Write(jsonText)
+}
+
+func (api *CassabonAPI) sendResponse(w http.ResponseWriter, resp config.IndexQueryResponse) {
+	switch resp.Status {
+	case config.IQS_OK:
+		w.Write(resp.Payload)
+	case config.IQS_NOCONTENT:
+		w.WriteHeader(http.StatusNoContent)
+	case config.IQS_NOTFOUND:
+		api.sendErrorResponse(w, http.StatusNotFound, "not found", resp.Message)
+	case config.IQS_BADREQUEST:
+		api.sendErrorResponse(w, http.StatusBadRequest, "bad request", resp.Message)
+	case config.IQS_ERROR:
+		api.sendErrorResponse(w, http.StatusInternalServerError, "internal error", resp.Message)
+	}
 }
 
 func (api *CassabonAPI) sendErrorResponse(w http.ResponseWriter, status int, text string, message string) {
