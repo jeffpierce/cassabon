@@ -42,8 +42,8 @@ func (api *CassabonAPI) run() {
 	api.server.Get("/paths", api.getPathHandler)
 	api.server.Get("/metrics", api.getMetricHandler)
 	api.server.Get("/healthcheck", api.healthHandler)
-	api.server.Delete("/remove/path/:path", api.deletePathHandler)
-	api.server.Delete("/remove/metric/:metric", api.deleteMetricHandler)
+	api.server.Delete("/paths/:path", api.deletePathHandler)
+	api.server.Delete("/metrics/:metric", api.deleteMetricHandler)
 	api.server.NotFound(api.notFoundHandler)
 
 	api.server.Use(requestLogger)
@@ -99,7 +99,7 @@ func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
 	q := config.DataQuery{r.Method, r.Form.Get("query"), ch}
-	config.G.Log.System.LogDebug("Received query: %s", q.Query)
+	config.G.Log.System.LogDebug("Received paths query: %s %s", q.Method, q.Query)
 
 	// Forward the query.
 	select {
@@ -116,8 +116,25 @@ func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 
 // deletePathHandler removes paths from the index store.
 func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *http.Request) {
-	// TODO:  Implement this in datastore.  c.URLParams["path"]
-	api.sendErrorResponse(w, http.StatusNotImplemented, "not implemented", "")
+
+	// Create the channel on which the response will be received.
+	ch := make(chan config.DataQueryResponse)
+
+	// Build the query.
+	q := config.DataQuery{r.Method, c.URLParams["path"], ch}
+	config.G.Log.System.LogDebug("Received paths query: %s %s", q.Method, q.Query)
+
+	// Forward the query.
+	select {
+	case config.G.Channels.IndexFetch <- q:
+	default:
+		config.G.Log.System.LogWarn(
+			"Index DELETE query discarded, IndexFetch channel is full (max %d entries)",
+			config.G.Channels.IndexFetchChanLen)
+	}
+
+	// Send the response to the client.
+	api.sendResponse(w, q)
 }
 
 // getMetricHandler processes requests like "GET /metrics?query=foo".
@@ -129,7 +146,7 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
 	q := config.DataQuery{r.Method, r.Form.Get("query"), ch}
-	config.G.Log.System.LogDebug("Received query: %s", q.Query)
+	config.G.Log.System.LogDebug("Received metrics query: %s %s", q.Method, q.Query)
 
 	// Forward the query.
 	select {
@@ -148,6 +165,25 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *http.Request) {
 	// TODO:  Implement this in datastore.  c.URLParams["metric"]
 	api.sendErrorResponse(w, http.StatusNotImplemented, "not implemented", "")
+
+	// Create the channel on which the response will be received.
+	ch := make(chan config.DataQueryResponse)
+
+	// Build the query.
+	q := config.DataQuery{r.Method, c.URLParams["metric"], ch}
+	config.G.Log.System.LogDebug("Received metrics query: %s %s", q.Method, q.Query)
+
+	// Forward the query.
+	select {
+	case config.G.Channels.IndexFetch <- q:
+	default:
+		config.G.Log.System.LogWarn(
+			"Metric DELETE query discarded, IndexFetch channel is full (max %d entries)",
+			config.G.Channels.IndexFetchChanLen)
+	}
+
+	// Send the response to the client.
+	api.sendResponse(w, q)
 }
 
 func (api *CassabonAPI) sendResponse(w http.ResponseWriter, q config.DataQuery) {
