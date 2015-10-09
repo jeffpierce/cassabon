@@ -371,20 +371,20 @@ func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, t
 }
 
 // query returns the data matched by the supplied query.
-func (sm *StoreManager) query(q config.IndexQuery) {
+func (sm *StoreManager) query(q config.DataQuery) {
 
 	config.G.Log.System.LogDebug("StoreManager::query %v", q.Query)
 
 	// Query particulars are mandatory.
 	if q.Query == "" {
-		q.Channel <- config.IndexQueryResponse{config.IQS_BADREQUEST, "no query specified", []byte{}}
+		q.Channel <- config.DataQueryResponse{config.DQS_BADREQUEST, "no query specified", []byte{}}
 		return
 	}
 
-	var resp config.IndexQueryResponse
+	var resp config.DataQueryResponse
 
 	// TODO: Build the query response.
-	resp = config.IndexQueryResponse{config.IQS_OK, "", []byte{'[', ']'}}
+	resp = config.DataQueryResponse{config.DQS_OK, "", []byte{'[', ']'}}
 
 	// For testing: time.Sleep(time.Second * 2)
 

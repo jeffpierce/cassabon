@@ -56,11 +56,11 @@ func (api *CassabonAPI) run() {
 func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
-	ch := make(chan config.IndexQueryResponse)
+	ch := make(chan config.DataQueryResponse)
 
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
-	q := config.IndexQuery{r.Form.Get("query"), ch}
+	q := config.DataQuery{r.Form.Get("query"), ch}
 	config.G.Log.System.LogDebug("Received query: %s", q.Query)
 
 	// Forward the query.
@@ -73,13 +73,13 @@ func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read the response.
-	var resp config.IndexQueryResponse
+	var resp config.DataQueryResponse
 	select {
 	case resp = <-q.Channel:
 		// Nothing, we have our response.
 	case <-time.After(time.Second):
 		// The query died or wedged; simulate a timeout response.
-		resp = config.IndexQueryResponse{config.IQS_ERROR, "query timed out", []byte{}}
+		resp = config.DataQueryResponse{config.DQS_ERROR, "query timed out", []byte{}}
 	}
 	close(q.Channel)
 
@@ -91,11 +91,11 @@ func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 func (api *CassabonAPI) metricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
-	ch := make(chan config.IndexQueryResponse)
+	ch := make(chan config.DataQueryResponse)
 
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
-	q := config.IndexQuery{r.Form.Get("query"), ch}
+	q := config.DataQuery{r.Form.Get("query"), ch}
 	config.G.Log.System.LogDebug("Received query: %s", q.Query)
 
 	// Forward the query.
@@ -108,13 +108,13 @@ func (api *CassabonAPI) metricsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read the response.
-	var resp config.IndexQueryResponse
+	var resp config.DataQueryResponse
 	select {
 	case resp = <-q.Channel:
 		// Nothing, we have our response.
 	case <-time.After(time.Second):
 		// The query died or wedged; simulate a timeout response.
-		resp = config.IndexQueryResponse{config.IQS_ERROR, "query timed out", []byte{}}
+		resp = config.DataQueryResponse{config.DQS_ERROR, "query timed out", []byte{}}
 	}
 	close(q.Channel)
 
@@ -164,17 +164,17 @@ func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonText)
 }
 
-func (api *CassabonAPI) sendResponse(w http.ResponseWriter, resp config.IndexQueryResponse) {
+func (api *CassabonAPI) sendResponse(w http.ResponseWriter, resp config.DataQueryResponse) {
 	switch resp.Status {
-	case config.IQS_OK:
+	case config.DQS_OK:
 		w.Write(resp.Payload)
-	case config.IQS_NOCONTENT:
+	case config.DQS_NOCONTENT:
 		w.WriteHeader(http.StatusNoContent)
-	case config.IQS_NOTFOUND:
+	case config.DQS_NOTFOUND:
 		api.sendErrorResponse(w, http.StatusNotFound, "not found", resp.Message)
-	case config.IQS_BADREQUEST:
+	case config.DQS_BADREQUEST:
 		api.sendErrorResponse(w, http.StatusBadRequest, "bad request", resp.Message)
-	case config.IQS_ERROR:
+	case config.DQS_ERROR:
 		api.sendErrorResponse(w, http.StatusInternalServerError, "internal error", resp.Message)
 	}
 }
