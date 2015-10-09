@@ -73,7 +73,7 @@ func (gopher *StatPathGopher) run() {
 			config.G.Log.System.LogDebug("Gopher::run received QUIT message")
 			config.G.OnReload2WG.Done()
 			return
-		case gopherQuery := <-config.G.Channels.Gopher:
+		case gopherQuery := <-config.G.Channels.IndexFetch:
 			go gopher.query(gopherQuery)
 		}
 	}

@@ -19,7 +19,7 @@ channels:
     datastorechanlen: 500
     datafetchchanlen: 100
     indexstorechanlen: 10
-    gopherchanlen: 100
+    indexfetchchanlen: 100
 #
 # Configuration values that will be re-processed by daemon on SIGHUP
 #

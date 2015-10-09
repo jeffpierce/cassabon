@@ -65,11 +65,11 @@ func (api *CassabonAPI) pathsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Forward the query.
 	select {
-	case config.G.Channels.Gopher <- q:
+	case config.G.Channels.IndexFetch <- q:
 	default:
 		config.G.Log.System.LogWarn(
-			"Index query discarded, Gopher channel is full (max %d entries)",
-			config.G.Channels.GopherChanLen)
+			"Index query discarded, IndexFetch channel is full (max %d entries)",
+			config.G.Channels.IndexFetchChanLen)
 	}
 
 	// Read the response.

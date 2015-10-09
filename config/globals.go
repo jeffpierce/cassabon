@@ -93,8 +93,8 @@ type Globals struct {
 		DataFetchChanLen  int
 		IndexStore        chan CarbonMetric
 		IndexStoreChanLen int
-		Gopher            chan IndexQuery
-		GopherChanLen     int
+		IndexFetch        chan IndexQuery
+		IndexFetchChanLen int
 	}
 
 	// Logger configuration and runtime properties.
