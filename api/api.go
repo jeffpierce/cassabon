@@ -110,19 +110,8 @@ func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 			config.G.Channels.IndexFetchChanLen)
 	}
 
-	// Read the response.
-	var resp config.DataQueryResponse
-	select {
-	case resp = <-q.Channel:
-		// Nothing, we have our response.
-	case <-time.After(time.Second):
-		// The query died or wedged; simulate a timeout response.
-		resp = config.DataQueryResponse{config.DQS_ERROR, "query timed out", []byte{}}
-	}
-	close(q.Channel)
-
 	// Send the response to the client.
-	api.sendResponse(w, resp)
+	api.sendResponse(w, q)
 }
 
 // deletePathHandler removes paths from the index store.
@@ -151,6 +140,18 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 			config.G.Channels.DataFetchChanLen)
 	}
 
+	// Send the response to the client.
+	api.sendResponse(w, q)
+}
+
+// deleteMetricHandler removes data from the metrics store.
+func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *http.Request) {
+	// TODO:  Implement this in datastore.  c.URLParams["metric"]
+	api.sendErrorResponse(w, http.StatusNotImplemented, "not implemented", "")
+}
+
+func (api *CassabonAPI) sendResponse(w http.ResponseWriter, q config.DataQuery) {
+
 	// Read the response.
 	var resp config.DataQueryResponse
 	select {
@@ -162,17 +163,7 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 	}
 	close(q.Channel)
 
-	// Send the response to the client.
-	api.sendResponse(w, resp)
-}
-
-// deleteMetricHandler removes data from the metrics store.
-func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *http.Request) {
-	// TODO:  Implement this in datastore.  c.URLParams["metric"]
-	api.sendErrorResponse(w, http.StatusNotImplemented, "not implemented", "")
-}
-
-func (api *CassabonAPI) sendResponse(w http.ResponseWriter, resp config.DataQueryResponse) {
+	// Inspect the response status, and send appropriate response headers/data to client.
 	switch resp.Status {
 	case config.DQS_OK:
 		if len(resp.Payload) > 0 {
