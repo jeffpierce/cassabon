@@ -167,9 +167,11 @@ func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
 func (api *CassabonAPI) sendResponse(w http.ResponseWriter, resp config.DataQueryResponse) {
 	switch resp.Status {
 	case config.DQS_OK:
-		w.Write(resp.Payload)
-	case config.DQS_NOCONTENT:
-		w.WriteHeader(http.StatusNoContent)
+		if len(resp.Payload) > 0 {
+			w.Write(resp.Payload)
+		} else {
+			w.WriteHeader(http.StatusNoContent)
+		}
 	case config.DQS_NOTFOUND:
 		api.sendErrorResponse(w, http.StatusNotFound, "not found", resp.Message)
 	case config.DQS_BADREQUEST:

@@ -21,7 +21,6 @@ type DataQueryStatus int
 
 const (
 	DQS_OK DataQueryStatus = iota
-	DQS_NOCONTENT
 	DQS_NOTFOUND
 	DQS_BADREQUEST
 	DQS_ERROR
