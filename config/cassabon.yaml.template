@@ -17,9 +17,9 @@ statsd:
             samplerate: 1.0
 channels:
     datastorechanlen: 500
-    datafetchchanlen: 100
+    datarequestchanlen: 100
     indexstorechanlen: 10
-    indexfetchchanlen: 100
+    indexrequestchanlen: 100
 #
 # Configuration values that will be re-processed by daemon on SIGHUP
 #

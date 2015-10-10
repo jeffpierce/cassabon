@@ -17,25 +17,25 @@ type CarbonMetric struct {
 	Timestamp float64 // Epoch timestamp
 }
 
-type IndexQueryStatus int
+type DataQueryStatus int
 
 const (
-	IQS_OK IndexQueryStatus = iota
-	IQS_NOCONTENT
-	IQS_NOTFOUND
-	IQS_BADREQUEST
-	IQS_ERROR
+	DQS_OK DataQueryStatus = iota
+	DQS_NOTFOUND
+	DQS_BADREQUEST
+	DQS_ERROR
 )
 
-type IndexQuery struct {
-	Query   string                  // Query
-	Channel chan IndexQueryResponse // Channel to send response back on.
+type DataQuery struct {
+	Method  string                 // The HTTP method from the request
+	Query   string                 // Query
+	Channel chan DataQueryResponse // Channel to send response back on.
 }
 
-type IndexQueryResponse struct {
-	Status  IndexQueryStatus // Either IQS_OK, or one of the error codes
-	Message string           // If Status != IQS_OK, a description of the error
-	Payload []byte           // If Status == IQS_OK, a well-formed JSON payload
+type DataQueryResponse struct {
+	Status  DataQueryStatus // Either DQS_OK, or one of the error codes
+	Message string          // If Status != DQS_OK, a description of the error
+	Payload []byte          // If Status == DQS_OK, a well-formed JSON payload
 }
 
 // RollupMethod is the way in which data points are combined in a time interval.
@@ -87,14 +87,14 @@ type Globals struct {
 
 	// Channels for communicating between modules.
 	Channels struct {
-		DataStore         chan CarbonMetric
-		DataStoreChanLen  int
-		DataFetch         chan IndexQuery
-		DataFetchChanLen  int
-		IndexStore        chan CarbonMetric
-		IndexStoreChanLen int
-		IndexFetch        chan IndexQuery
-		IndexFetchChanLen int
+		DataStore           chan CarbonMetric
+		DataStoreChanLen    int
+		DataRequest         chan DataQuery
+		DataRequestChanLen  int
+		IndexStore          chan CarbonMetric
+		IndexStoreChanLen   int
+		IndexRequest        chan DataQuery
+		IndexRequestChanLen int
 	}
 
 	// Logger configuration and runtime properties.
