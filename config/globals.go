@@ -87,14 +87,14 @@ type Globals struct {
 
 	// Channels for communicating between modules.
 	Channels struct {
-		DataStore         chan CarbonMetric
-		DataStoreChanLen  int
-		DataFetch         chan DataQuery
-		DataFetchChanLen  int
-		IndexStore        chan CarbonMetric
-		IndexStoreChanLen int
-		IndexFetch        chan DataQuery
-		IndexFetchChanLen int
+		DataStore           chan CarbonMetric
+		DataStoreChanLen    int
+		DataRequest         chan DataQuery
+		DataRequestChanLen  int
+		IndexStore          chan CarbonMetric
+		IndexStoreChanLen   int
+		IndexRequest        chan DataQuery
+		IndexRequestChanLen int
 	}
 
 	// Logger configuration and runtime properties.

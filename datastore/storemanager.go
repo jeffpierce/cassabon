@@ -184,7 +184,7 @@ func (sm *StoreManager) run() {
 			return
 		case metric := <-config.G.Channels.DataStore:
 			sm.accumulate(metric)
-		case query := <-config.G.Channels.DataFetch:
+		case query := <-config.G.Channels.DataRequest:
 			go sm.query(query)
 		case <-sm.timeout:
 			sm.flush(false)

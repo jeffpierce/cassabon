@@ -74,7 +74,7 @@ func (im *IndexManager) run() {
 			return
 		case metric := <-config.G.Channels.IndexStore:
 			im.index(metric.Path)
-		case query := <-config.G.Channels.IndexFetch:
+		case query := <-config.G.Channels.IndexRequest:
 			go im.query(query)
 		}
 	}

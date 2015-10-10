@@ -90,9 +90,9 @@ func main() {
 	config.G.OnPeerChangeRsp = make(chan struct{}, 1)
 	config.G.OnExit = make(chan struct{}, 1)
 	config.G.Channels.DataStore = make(chan config.CarbonMetric, config.G.Channels.DataStoreChanLen)
-	config.G.Channels.DataFetch = make(chan config.DataQuery, config.G.Channels.DataFetchChanLen)
+	config.G.Channels.DataRequest = make(chan config.DataQuery, config.G.Channels.DataRequestChanLen)
 	config.G.Channels.IndexStore = make(chan config.CarbonMetric, config.G.Channels.IndexStoreChanLen)
-	config.G.Channels.IndexFetch = make(chan config.DataQuery, config.G.Channels.IndexFetchChanLen)
+	config.G.Channels.IndexRequest = make(chan config.DataQuery, config.G.Channels.IndexRequestChanLen)
 
 	// Create and initialize the internal modules.
 	storeManager := new(datastore.StoreManager)

@@ -103,11 +103,11 @@ func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Forward the query.
 	select {
-	case config.G.Channels.IndexFetch <- q:
+	case config.G.Channels.IndexRequest <- q:
 	default:
 		config.G.Log.System.LogWarn(
-			"Index query discarded, IndexFetch channel is full (max %d entries)",
-			config.G.Channels.IndexFetchChanLen)
+			"Index query discarded, IndexRequest channel is full (max %d entries)",
+			config.G.Channels.IndexRequestChanLen)
 	}
 
 	// Send the response to the client.
@@ -126,11 +126,11 @@ func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *htt
 
 	// Forward the query.
 	select {
-	case config.G.Channels.IndexFetch <- q:
+	case config.G.Channels.IndexRequest <- q:
 	default:
 		config.G.Log.System.LogWarn(
-			"Index DELETE query discarded, IndexFetch channel is full (max %d entries)",
-			config.G.Channels.IndexFetchChanLen)
+			"Index DELETE query discarded, IndexRequest channel is full (max %d entries)",
+			config.G.Channels.IndexRequestChanLen)
 	}
 
 	// Send the response to the client.
@@ -150,11 +150,11 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 
 	// Forward the query.
 	select {
-	case config.G.Channels.DataFetch <- q:
+	case config.G.Channels.DataRequest <- q:
 	default:
 		config.G.Log.System.LogWarn(
-			"Metrics query discarded, DataFetch channel is full (max %d entries)",
-			config.G.Channels.DataFetchChanLen)
+			"Metrics query discarded, DataRequest channel is full (max %d entries)",
+			config.G.Channels.DataRequestChanLen)
 	}
 
 	// Send the response to the client.
@@ -175,11 +175,11 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 
 	// Forward the query.
 	select {
-	case config.G.Channels.IndexFetch <- q:
+	case config.G.Channels.IndexRequest <- q:
 	default:
 		config.G.Log.System.LogWarn(
-			"Metric DELETE query discarded, IndexFetch channel is full (max %d entries)",
-			config.G.Channels.IndexFetchChanLen)
+			"Metric DELETE query discarded, IndexRequest channel is full (max %d entries)",
+			config.G.Channels.IndexRequestChanLen)
 	}
 
 	// Send the response to the client.
