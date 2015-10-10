@@ -163,8 +163,6 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 
 // deleteMetricHandler removes data from the metrics store.
 func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *http.Request) {
-	// TODO:  Implement this in datastore.  c.URLParams["metric"]
-	api.sendErrorResponse(w, http.StatusNotImplemented, "not implemented", "")
 
 	// Create the channel on which the response will be received.
 	ch := make(chan config.DataQueryResponse)
