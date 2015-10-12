@@ -57,7 +57,8 @@ func main() {
 	// Announce the application startup in the logs.
 	config.G.Log.System.LogInfo("Startup in progress")
 	if errLogLevel != nil {
-		config.G.Log.System.LogWarn("Configuration error: %s", errLogLevel.Error())
+		config.G.Log.System.LogWarn("Configuration error: %s; using %s",
+			errLogLevel.Error(), logging.SeverityToText(sev))
 	}
 
 	// Now that we have a logger to report warnings, populate the remainder of the global config.
@@ -118,8 +119,11 @@ func main() {
 				config.G.Log.System.LogError("Unable to load configuration: %s", err.Error())
 			} else {
 				config.LoadRefreshableValues()
-				sev, _ := logging.TextToSeverity(config.G.Log.Loglevel)
-				config.G.Log.System.SetLogLevel(sev)
+				if sev, err := logging.TextToSeverity(config.G.Log.Loglevel); err == nil {
+					config.G.Log.System.SetLogLevel(sev)
+				} else {
+					config.G.Log.System.LogWarn("Configuration error: %s", err.Error())
+				}
 			}
 		}
 

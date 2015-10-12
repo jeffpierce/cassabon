@@ -56,8 +56,8 @@ var severityText = map[Severity]string{
 	Fatal:        "FATAL",
 }
 
-// severityToText maps the severity value to a name for printing.
-func severityToText(sev Severity) string {
+// SeverityToText maps the severity value to a name for printing.
+func SeverityToText(sev Severity) string {
 	s, ok := severityText[sev]
 	if !ok {
 		s = "UNKNOWN"
@@ -85,7 +85,7 @@ func TextToSeverity(s string) (Severity, error) {
 	case "fatal":
 		sev = Fatal
 	default:
-		err = fmt.Errorf(`"%s" is not a valid logging level; using DEBUG`, s)
+		err = fmt.Errorf(`"%s" is not a valid logging level`, s)
 	}
 	return sev, err
 }
@@ -122,7 +122,7 @@ func (l *FileLogger) init(logFacility string) {
 // SetLogLevel updates the logging level threshold with imediate effect.
 func (l *FileLogger) SetLogLevel(logLevel Severity) {
 	l.logLevel = logLevel
-	l.LogInfo("Log level set to %s", severityToText(logLevel))
+	l.LogInfo("Log level set to %s", SeverityToText(logLevel))
 }
 
 // Open allocates resources for the logger.
@@ -282,6 +282,6 @@ func (l *FileLogger) emit(sev Severity, format string, a ...interface{}) {
 	if l.logLevel == Unclassified {
 		l.logger.Printf("["+l.logFacility+"] "+format, a...)
 	} else {
-		l.logger.Printf("["+l.logFacility+"] ["+severityToText(sev)+"] "+format, a...)
+		l.logger.Printf("["+l.logFacility+"] ["+SeverityToText(sev)+"] "+format, a...)
 	}
 }
