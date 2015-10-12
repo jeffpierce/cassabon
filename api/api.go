@@ -148,8 +148,8 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
-	q := config.MetricQuery{r.Method, r.Form.Get("query"), ch}
-	config.G.Log.System.LogDebug("Received metrics query: %s %s", q.Method, q.Query)
+	q := config.MetricQuery{r.Method, []string{}, 0, 0, ch}
+	config.G.Log.System.LogDebug("Received metrics query: %s %v", q.Method, q.Query)
 
 	// Forward the query.
 	select {
@@ -171,8 +171,8 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 	ch := make(chan config.APIQueryResponse)
 
 	// Build the query.
-	q := config.MetricQuery{r.Method, c.URLParams["metric"], ch}
-	config.G.Log.System.LogDebug("Received metrics query: %s %s", q.Method, q.Query)
+	q := config.MetricQuery{r.Method, []string{}, 0, 0, ch}
+	config.G.Log.System.LogDebug("Received metrics query: %s %v", q.Method, q.Query)
 
 	// Forward the query.
 	select {

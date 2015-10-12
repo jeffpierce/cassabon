@@ -391,7 +391,7 @@ func (sm *StoreManager) queryGET(q config.MetricQuery) {
 	config.G.Log.System.LogDebug("StoreManager::query %v", q.Query)
 
 	// Query particulars are mandatory.
-	if q.Query == "" {
+	if len(q.Query) == 0 || q.Query[0] == "" {
 		q.Channel <- config.APIQueryResponse{config.AQS_BADREQUEST, "no query specified", []byte{}}
 		return
 	}
