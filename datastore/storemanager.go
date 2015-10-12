@@ -187,9 +187,9 @@ func (sm *StoreManager) run() {
 			sm.flush(true)
 			sm.wg.Done()
 			return
-		case metric := <-config.G.Channels.DataStore:
+		case metric := <-config.G.Channels.MetricStore:
 			sm.accumulate(metric)
-		case query := <-config.G.Channels.DataRequest:
+		case query := <-config.G.Channels.MetricRequest:
 			go sm.query(query)
 		case <-sm.timeout:
 			sm.flush(false)
@@ -376,7 +376,7 @@ func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, t
 }
 
 // query returns the data matched by the supplied query.
-func (sm *StoreManager) query(q config.DataQuery) {
+func (sm *StoreManager) query(q config.MetricQuery) {
 	switch strings.ToLower(q.Method) {
 	case "delete":
 		// TODO
@@ -386,20 +386,20 @@ func (sm *StoreManager) query(q config.DataQuery) {
 }
 
 // query returns the data matched by the supplied query.
-func (sm *StoreManager) queryGET(q config.DataQuery) {
+func (sm *StoreManager) queryGET(q config.MetricQuery) {
 
 	config.G.Log.System.LogDebug("StoreManager::query %v", q.Query)
 
 	// Query particulars are mandatory.
-	if q.Query == "" {
-		q.Channel <- config.DataQueryResponse{config.DQS_BADREQUEST, "no query specified", []byte{}}
+	if len(q.Query) == 0 || q.Query[0] == "" {
+		q.Channel <- config.APIQueryResponse{config.AQS_BADREQUEST, "no query specified", []byte{}}
 		return
 	}
 
-	var resp config.DataQueryResponse
+	var resp config.APIQueryResponse
 
 	// TODO: Build the query response.
-	resp = config.DataQueryResponse{config.DQS_OK, "", []byte{'[', ']'}}
+	resp = config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
 
 	// For testing: time.Sleep(time.Second * 2)
 

@@ -97,11 +97,11 @@ func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
 func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
-	ch := make(chan config.DataQueryResponse)
+	ch := make(chan config.APIQueryResponse)
 
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
-	q := config.DataQuery{r.Method, r.Form.Get("query"), ch}
+	q := config.IndexQuery{r.Method, r.Form.Get("query"), ch}
 	config.G.Log.System.LogDebug("Received paths query: %s %s", q.Method, q.Query)
 
 	// Forward the query.
@@ -114,17 +114,17 @@ func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the response to the client.
-	api.sendResponse(w, q)
+	api.sendResponse(w, ch)
 }
 
 // deletePathHandler removes paths from the index store.
 func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
-	ch := make(chan config.DataQueryResponse)
+	ch := make(chan config.APIQueryResponse)
 
 	// Build the query.
-	q := config.DataQuery{r.Method, c.URLParams["path"], ch}
+	q := config.IndexQuery{r.Method, c.URLParams["path"], ch}
 	config.G.Log.System.LogDebug("Received paths query: %s %s", q.Method, q.Query)
 
 	// Forward the query.
@@ -137,46 +137,46 @@ func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *htt
 	}
 
 	// Send the response to the client.
-	api.sendResponse(w, q)
+	api.sendResponse(w, ch)
 }
 
 // getMetricHandler processes requests like "GET /metrics?query=foo".
 func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
-	ch := make(chan config.DataQueryResponse)
+	ch := make(chan config.APIQueryResponse)
 
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
-	q := config.DataQuery{r.Method, r.Form.Get("query"), ch}
-	config.G.Log.System.LogDebug("Received metrics query: %s %s", q.Method, q.Query)
+	q := config.MetricQuery{r.Method, []string{}, 0, 0, ch}
+	config.G.Log.System.LogDebug("Received metrics query: %s %v", q.Method, q.Query)
 
 	// Forward the query.
 	select {
-	case config.G.Channels.DataRequest <- q:
+	case config.G.Channels.MetricRequest <- q:
 	default:
 		config.G.Log.System.LogWarn(
-			"Metrics query discarded, DataRequest channel is full (max %d entries)",
-			config.G.Channels.DataRequestChanLen)
+			"Metrics query discarded, MetricRequest channel is full (max %d entries)",
+			config.G.Channels.MetricRequestChanLen)
 	}
 
 	// Send the response to the client.
-	api.sendResponse(w, q)
+	api.sendResponse(w, ch)
 }
 
 // deleteMetricHandler removes data from the metrics store.
 func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
-	ch := make(chan config.DataQueryResponse)
+	ch := make(chan config.APIQueryResponse)
 
 	// Build the query.
-	q := config.DataQuery{r.Method, c.URLParams["metric"], ch}
-	config.G.Log.System.LogDebug("Received metrics query: %s %s", q.Method, q.Query)
+	q := config.MetricQuery{r.Method, []string{}, 0, 0, ch}
+	config.G.Log.System.LogDebug("Received metrics query: %s %v", q.Method, q.Query)
 
 	// Forward the query.
 	select {
-	case config.G.Channels.IndexRequest <- q:
+	case config.G.Channels.MetricRequest <- q:
 	default:
 		config.G.Log.System.LogWarn(
 			"Metric DELETE query discarded, IndexRequest channel is full (max %d entries)",
@@ -184,35 +184,35 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 	}
 
 	// Send the response to the client.
-	api.sendResponse(w, q)
+	api.sendResponse(w, ch)
 }
 
-func (api *CassabonAPI) sendResponse(w http.ResponseWriter, q config.DataQuery) {
+func (api *CassabonAPI) sendResponse(w http.ResponseWriter, ch chan config.APIQueryResponse) {
 
 	// Read the response.
-	var resp config.DataQueryResponse
+	var resp config.APIQueryResponse
 	select {
-	case resp = <-q.Channel:
+	case resp = <-ch:
 		// Nothing, we have our response.
 	case <-time.After(time.Second):
 		// The query died or wedged; simulate a timeout response.
-		resp = config.DataQueryResponse{config.DQS_ERROR, "query timed out", []byte{}}
+		resp = config.APIQueryResponse{config.AQS_ERROR, "query timed out", []byte{}}
 	}
-	close(q.Channel)
+	close(ch)
 
 	// Inspect the response status, and send appropriate response headers/data to client.
 	switch resp.Status {
-	case config.DQS_OK:
+	case config.AQS_OK:
 		if len(resp.Payload) > 0 {
 			w.Write(resp.Payload)
 		} else {
 			w.WriteHeader(http.StatusNoContent)
 		}
-	case config.DQS_NOTFOUND:
+	case config.AQS_NOTFOUND:
 		api.sendErrorResponse(w, http.StatusNotFound, "not found", resp.Message)
-	case config.DQS_BADREQUEST:
+	case config.AQS_BADREQUEST:
 		api.sendErrorResponse(w, http.StatusBadRequest, "bad request", resp.Message)
-	case config.DQS_ERROR:
+	case config.AQS_ERROR:
 		api.sendErrorResponse(w, http.StatusInternalServerError, "internal error", resp.Message)
 	}
 }

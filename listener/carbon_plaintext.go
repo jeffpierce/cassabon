@@ -242,7 +242,7 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 	peerIndex, isMine := cpl.peerList.OwnerOf(statPath)
 	if isMine {
 		// Assemble into canonical struct and send to queue manager.
-		config.G.Channels.DataStore <- config.CarbonMetric{statPath, val, ts}
+		config.G.Channels.MetricStore <- config.CarbonMetric{statPath, val, ts}
 	} else {
 		// Send original input line to appropriate peer.
 		cpl.peerList.target <- indexedLine{peerIndex, line}

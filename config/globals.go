@@ -16,25 +16,33 @@ type CarbonMetric struct {
 	Timestamp float64 // Epoch timestamp
 }
 
-type DataQueryStatus int
+type APIQueryStatus int
 
 const (
-	DQS_OK DataQueryStatus = iota
-	DQS_NOTFOUND
-	DQS_BADREQUEST
-	DQS_ERROR
+	AQS_OK APIQueryStatus = iota
+	AQS_NOTFOUND
+	AQS_BADREQUEST
+	AQS_ERROR
 )
 
-type DataQuery struct {
-	Method  string                 // The HTTP method from the request
-	Query   string                 // Query
-	Channel chan DataQueryResponse // Channel to send response back on.
+type IndexQuery struct {
+	Method  string                // The HTTP method from the request
+	Query   string                // Query
+	Channel chan APIQueryResponse // Channel to send response back on.
 }
 
-type DataQueryResponse struct {
-	Status  DataQueryStatus // Either DQS_OK, or one of the error codes
-	Message string          // If Status != DQS_OK, a description of the error
-	Payload []byte          // If Status == DQS_OK, a well-formed JSON payload
+type MetricQuery struct {
+	Method  string                // The HTTP method from the request
+	Query   []string              // Query
+	From    uint64                // Start of time window for metrics range
+	To      uint64                // End of time window for metrics range
+	Channel chan APIQueryResponse // Channel to send response back on.
+}
+
+type APIQueryResponse struct {
+	Status  APIQueryStatus // Either AQS_OK, or one of the error codes
+	Message string         // If Status != AQS_OK, a description of the error
+	Payload []byte         // If Status == AQS_OK, a well-formed JSON payload
 }
 
 // RollupMethod is the way in which data points are combined in a time interval.
@@ -83,14 +91,14 @@ type Globals struct {
 
 	// Channels for communicating between modules.
 	Channels struct {
-		DataStore           chan CarbonMetric
-		DataStoreChanLen    int
-		DataRequest         chan DataQuery
-		DataRequestChanLen  int
-		IndexStore          chan CarbonMetric
-		IndexStoreChanLen   int
-		IndexRequest        chan DataQuery
-		IndexRequestChanLen int
+		MetricStore          chan CarbonMetric
+		MetricStoreChanLen   int
+		MetricRequest        chan MetricQuery
+		MetricRequestChanLen int
+		IndexStore           chan CarbonMetric
+		IndexStoreChanLen    int
+		IndexRequest         chan IndexQuery
+		IndexRequestChanLen  int
 	}
 
 	// Logger configuration and runtime properties.
