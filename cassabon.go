@@ -57,7 +57,7 @@ func main() {
 	// Announce the application startup in the logs.
 	config.G.Log.System.LogInfo("Startup in progress")
 	if errLogLevel != nil {
-		config.G.Log.System.LogWarn("Bad command line argument: %v", errLogLevel)
+		config.G.Log.System.LogWarn("Configuration error: %s", errLogLevel.Error())
 	}
 
 	// Now that we have a logger to report warnings, populate the remainder of the global config.
