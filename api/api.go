@@ -97,7 +97,7 @@ func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
 func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
-	ch := make(chan config.DataQueryResponse)
+	ch := make(chan config.APIQueryResponse)
 
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
@@ -121,7 +121,7 @@ func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
-	ch := make(chan config.DataQueryResponse)
+	ch := make(chan config.APIQueryResponse)
 
 	// Build the query.
 	q := config.DataQuery{r.Method, c.URLParams["path"], ch}
@@ -144,7 +144,7 @@ func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *htt
 func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
-	ch := make(chan config.DataQueryResponse)
+	ch := make(chan config.APIQueryResponse)
 
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
@@ -168,7 +168,7 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *http.Request) {
 
 	// Create the channel on which the response will be received.
-	ch := make(chan config.DataQueryResponse)
+	ch := make(chan config.APIQueryResponse)
 
 	// Build the query.
 	q := config.DataQuery{r.Method, c.URLParams["metric"], ch}
@@ -190,29 +190,29 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 func (api *CassabonAPI) sendResponse(w http.ResponseWriter, q config.DataQuery) {
 
 	// Read the response.
-	var resp config.DataQueryResponse
+	var resp config.APIQueryResponse
 	select {
 	case resp = <-q.Channel:
 		// Nothing, we have our response.
 	case <-time.After(time.Second):
 		// The query died or wedged; simulate a timeout response.
-		resp = config.DataQueryResponse{config.DQS_ERROR, "query timed out", []byte{}}
+		resp = config.APIQueryResponse{config.AQS_ERROR, "query timed out", []byte{}}
 	}
 	close(q.Channel)
 
 	// Inspect the response status, and send appropriate response headers/data to client.
 	switch resp.Status {
-	case config.DQS_OK:
+	case config.AQS_OK:
 		if len(resp.Payload) > 0 {
 			w.Write(resp.Payload)
 		} else {
 			w.WriteHeader(http.StatusNoContent)
 		}
-	case config.DQS_NOTFOUND:
+	case config.AQS_NOTFOUND:
 		api.sendErrorResponse(w, http.StatusNotFound, "not found", resp.Message)
-	case config.DQS_BADREQUEST:
+	case config.AQS_BADREQUEST:
 		api.sendErrorResponse(w, http.StatusBadRequest, "bad request", resp.Message)
-	case config.DQS_ERROR:
+	case config.AQS_ERROR:
 		api.sendErrorResponse(w, http.StatusInternalServerError, "internal error", resp.Message)
 	}
 }

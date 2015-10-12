@@ -146,7 +146,7 @@ func (im *IndexManager) queryGET(q config.DataQuery) {
 
 	// Query particulars are mandatory.
 	if q.Query == "" {
-		q.Channel <- config.DataQueryResponse{config.DQS_BADREQUEST, "no query specified", []byte{}}
+		q.Channel <- config.APIQueryResponse{config.AQS_BADREQUEST, "no query specified", []byte{}}
 		return
 	}
 
@@ -158,7 +158,7 @@ func (im *IndexManager) queryGET(q config.DataQuery) {
 
 	// Determine if we need a simple query or a complex one.
 	// len(splitWild) == 2 and splitWild[1] == "" means we have an ending wildcard only.
-	var resp config.DataQueryResponse
+	var resp config.APIQueryResponse
 	if len(splitWild) == 1 {
 		resp = im.noWild(q.Query, len(queryNodes))
 	} else if len(splitWild) == 2 && splitWild[1] == "" {
@@ -201,7 +201,7 @@ func (im *IndexManager) getMax(s string) string {
 }
 
 // noWild performs fetches for strings with no wildcard characters.
-func (im *IndexManager) noWild(q string, l int) config.DataQueryResponse {
+func (im *IndexManager) noWild(q string, l int) config.APIQueryResponse {
 
 	// No wild card means we should be retrieving one stat, or none at all.
 	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", q, ":"}, "")
@@ -213,18 +213,18 @@ func (im *IndexManager) noWild(q string, l int) config.DataQueryResponse {
 
 	if err != nil {
 		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
-		return config.DataQueryResponse{config.DQS_ERROR, err.Error(), []byte{}}
+		return config.APIQueryResponse{config.AQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
 		// Return an empty array.
-		return config.DataQueryResponse{config.DQS_OK, "", []byte{'[', ']'}}
+		return config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
 	}
 
-	return config.DataQueryResponse{config.DQS_OK, "", im.processQueryResults(resp, l)}
+	return config.APIQueryResponse{config.AQS_OK, "", im.processQueryResults(resp, l)}
 }
 
 // simpleWild performs fetches for strings with one wildcard char, in the last position.
-func (im *IndexManager) simpleWild(q string, l int) config.DataQueryResponse {
+func (im *IndexManager) simpleWild(q string, l int) config.APIQueryResponse {
 
 	// Queries with an ending wild card only are easy, as the response from
 	// ZRANGEBYLEX <key> [bigE_len:path [bigE_len:path\xff is the answer.
@@ -238,18 +238,18 @@ func (im *IndexManager) simpleWild(q string, l int) config.DataQueryResponse {
 
 	if err != nil {
 		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
-		return config.DataQueryResponse{config.DQS_ERROR, err.Error(), []byte{}}
+		return config.APIQueryResponse{config.AQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
 		// Return an empty array.
-		return config.DataQueryResponse{config.DQS_OK, "", []byte{'[', ']'}}
+		return config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
 	}
 
-	return config.DataQueryResponse{config.DQS_OK, "", im.processQueryResults(resp, l)}
+	return config.APIQueryResponse{config.AQS_OK, "", im.processQueryResults(resp, l)}
 }
 
 // complexWild performs fetches for strings with multiple wildcard characters.
-func (im *IndexManager) complexWild(splitWild []string, l int) config.DataQueryResponse {
+func (im *IndexManager) complexWild(splitWild []string, l int) config.APIQueryResponse {
 
 	// Resolve multiple wildcards by pulling in the nodes with length l that start with
 	// the first part of the non-wildcard, then filter that set with a regex match.
@@ -270,11 +270,11 @@ func (im *IndexManager) complexWild(splitWild []string, l int) config.DataQueryR
 
 	if err != nil {
 		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
-		return config.DataQueryResponse{config.DQS_ERROR, err.Error(), []byte{}}
+		return config.APIQueryResponse{config.AQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
 		// Return an empty array.
-		return config.DataQueryResponse{config.DQS_OK, "", []byte{'[', ']'}}
+		return config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
 	}
 
 	// Build regular expression to match against results.
@@ -284,7 +284,7 @@ func (im *IndexManager) complexWild(splitWild []string, l int) config.DataQueryR
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not compile %s into regex: %s", rawRegex, err.Error())
 		config.G.Log.System.LogWarn(errMsg)
-		return config.DataQueryResponse{config.DQS_BADREQUEST, errMsg, []byte{}}
+		return config.APIQueryResponse{config.AQS_BADREQUEST, errMsg, []byte{}}
 	}
 
 	for _, iter := range resp {
@@ -295,10 +295,10 @@ func (im *IndexManager) complexWild(splitWild []string, l int) config.DataQueryR
 	}
 
 	if len(matches) > 0 {
-		return config.DataQueryResponse{config.DQS_OK, "", im.processQueryResults(matches, l)}
+		return config.APIQueryResponse{config.AQS_OK, "", im.processQueryResults(matches, l)}
 	} else {
 		// Return an empty array.
-		return config.DataQueryResponse{config.DQS_OK, "", []byte{'[', ']'}}
+		return config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
 	}
 }
 

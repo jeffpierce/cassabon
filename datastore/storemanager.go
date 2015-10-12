@@ -392,14 +392,14 @@ func (sm *StoreManager) queryGET(q config.DataQuery) {
 
 	// Query particulars are mandatory.
 	if q.Query == "" {
-		q.Channel <- config.DataQueryResponse{config.DQS_BADREQUEST, "no query specified", []byte{}}
+		q.Channel <- config.APIQueryResponse{config.AQS_BADREQUEST, "no query specified", []byte{}}
 		return
 	}
 
-	var resp config.DataQueryResponse
+	var resp config.APIQueryResponse
 
 	// TODO: Build the query response.
-	resp = config.DataQueryResponse{config.DQS_OK, "", []byte{'[', ']'}}
+	resp = config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
 
 	// For testing: time.Sleep(time.Second * 2)
 
