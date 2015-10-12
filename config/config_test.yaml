@@ -12,8 +12,8 @@ statsd:
             key: "carbon.received.failure"
             samplerate: 1.0
 channels:
-    datastorechanlen: 10
-    datarequestchanlen: 10
+    metricstorechanlen: 10
+    metricrequestchanlen: 10
     indexstorechanlen: 10
     indexrequestchanlen: 10
 carbon:

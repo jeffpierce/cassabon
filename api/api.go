@@ -153,11 +153,11 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 
 	// Forward the query.
 	select {
-	case config.G.Channels.DataRequest <- q:
+	case config.G.Channels.MetricRequest <- q:
 	default:
 		config.G.Log.System.LogWarn(
-			"Metrics query discarded, DataRequest channel is full (max %d entries)",
-			config.G.Channels.DataRequestChanLen)
+			"Metrics query discarded, MetricRequest channel is full (max %d entries)",
+			config.G.Channels.MetricRequestChanLen)
 	}
 
 	// Send the response to the client.

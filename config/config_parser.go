@@ -21,10 +21,10 @@ type CassabonConfig struct {
 	}
 	Statsd   StatsdSettings
 	Channels struct {
-		DataStoreChanLen    int // Length of the DataStore channel
-		DataRequestChanLen  int // Length of the DataRequest channel
-		IndexStoreChanLen   int // Length of the IndexStore channel
-		IndexRequestChanLen int // Length of the IndexRequest channel
+		MetricStoreChanLen   int // Length of the MetricStore channel
+		MetricRequestChanLen int // Length of the MetricRequest channel
+		IndexStoreChanLen    int // Length of the IndexStore channel
+		IndexRequestChanLen  int // Length of the IndexRequest channel
 	}
 	Carbon struct {
 		Listen     string // ip:port on which to listen for Carbon stats
@@ -110,19 +110,19 @@ func LoadStartupValues() {
 	G.Statsd = rawCassabonConfig.Statsd
 
 	// Copy in and sanitize the channel lengths.
-	G.Channels.DataStoreChanLen = rawCassabonConfig.Channels.DataStoreChanLen
-	if G.Channels.DataStoreChanLen < 10 {
-		G.Channels.DataStoreChanLen = 10
+	G.Channels.MetricStoreChanLen = rawCassabonConfig.Channels.MetricStoreChanLen
+	if G.Channels.MetricStoreChanLen < 10 {
+		G.Channels.MetricStoreChanLen = 10
 	}
-	if G.Channels.DataStoreChanLen > 1000 {
-		G.Channels.DataStoreChanLen = 1000
+	if G.Channels.MetricStoreChanLen > 1000 {
+		G.Channels.MetricStoreChanLen = 1000
 	}
-	G.Channels.DataRequestChanLen = rawCassabonConfig.Channels.DataRequestChanLen
-	if G.Channels.DataRequestChanLen < 10 {
-		G.Channels.DataRequestChanLen = 10
+	G.Channels.MetricRequestChanLen = rawCassabonConfig.Channels.MetricRequestChanLen
+	if G.Channels.MetricRequestChanLen < 10 {
+		G.Channels.MetricRequestChanLen = 10
 	}
-	if G.Channels.DataRequestChanLen > 1000 {
-		G.Channels.DataRequestChanLen = 1000
+	if G.Channels.MetricRequestChanLen > 1000 {
+		G.Channels.MetricRequestChanLen = 1000
 	}
 	G.Channels.IndexStoreChanLen = rawCassabonConfig.Channels.IndexStoreChanLen
 	if G.Channels.IndexStoreChanLen < 10 {
