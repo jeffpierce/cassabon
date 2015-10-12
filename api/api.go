@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zenazn/goji/graceful"
@@ -16,21 +17,23 @@ import (
 )
 
 type CassabonAPI struct {
+	wg       *sync.WaitGroup
 	server   *web.Mux
 	hostPort string
 }
 
-func (api *CassabonAPI) Start() {
+func (api *CassabonAPI) Start(wg *sync.WaitGroup) {
 	// Add to waitgroup and run go routine.
 	api.hostPort = config.G.API.Listen
-	config.G.OnReload1WG.Add(1)
+	api.wg = wg
+	api.wg.Add(1)
 	go api.run()
 }
 
 func (api *CassabonAPI) Stop() {
 	config.G.Log.System.LogInfo("API received Stop command, gracefully shutting down.")
 	graceful.Shutdown()
-	config.G.OnReload1WG.Done()
+	api.wg.Done()
 }
 
 func (api *CassabonAPI) run() {

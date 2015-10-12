@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 
 	"github.com/jeffpierce/cassabon/api"
@@ -21,6 +22,11 @@ func main() {
 
 	// The name of the YAML configuration file.
 	var confFile string
+
+	// The WaitGroups for managing orderly goroutine reloads and termination.
+	var onReload1WG sync.WaitGroup // Wait on this if you receive external inputs
+	var onReload2WG sync.WaitGroup // Wait on this to be certain no more input will arrive
+	var onExitWG sync.WaitGroup    // Wait on this for final program termination
 
 	// Get options provided on the command line.
 	flag.StringVar(&confFile, "conf", "config/cassabon.yaml", "Location of YAML configuration file.")
@@ -103,6 +109,9 @@ func main() {
 	indexManager.Init()
 	carbonListener.Init()
 
+	// StoreManager goroutines persist for the life of the app; start them now.
+	storeManager.Start(&onExitWG)
+
 	// Repeat until terminated by SIGINT/SIGTERM.
 	configIsStale := false
 	repeat := true
@@ -128,13 +137,12 @@ func main() {
 		}
 
 		// Start the internal modules, Carbon listener last.
-		storeManager.Start()
-		indexManager.Start()
-		carbonListener.Start()
+		indexManager.Start(&onReload2WG)
+		carbonListener.Start(&onReload1WG, &onReload2WG)
 
 		// Start Cassabon Web API
 		api := new(api.CassabonAPI)
-		api.Start()
+		api.Start(&onReload1WG)
 		config.G.Log.System.LogInfo("Initialization complete")
 
 		// Wait for receipt of a recognized signal.
@@ -142,31 +150,31 @@ func main() {
 
 		case <-config.G.OnPeerChange:
 			config.G.Log.System.LogInfo("Received OnPeerChange")
-			api.Stop()                  // Notify API to stop
-			close(config.G.OnReload1)   // Notify all externally-listening goroutines to exit
-			config.G.OnReload1WG.Wait() // Wait for them to exit
-			close(config.G.OnReload2)   // Notify all reloadable goroutines to exit
-			config.G.OnReload2WG.Wait() // Wait for them to exit
+			api.Stop()                // Notify API to stop
+			close(config.G.OnReload1) // Notify all externally-listening goroutines to exit
+			onReload1WG.Wait()        // Wait for them to exit
+			close(config.G.OnReload2) // Notify all reloadable goroutines to exit
+			onReload2WG.Wait()        // Wait for them to exit
 
 		case <-sighup:
 			config.G.Log.System.LogInfo("Received SIGHUP")
 			configIsStale = true
-			api.Stop()                  // Notify API to stop
-			close(config.G.OnReload1)   // Notify all externally-listening goroutines to exit
-			config.G.OnReload1WG.Wait() // Wait for them to exit
-			close(config.G.OnReload2)   // Notify all reloadable goroutines to exit
-			config.G.OnReload2WG.Wait() // Wait for them to exit
+			api.Stop()                // Notify API to stop
+			close(config.G.OnReload1) // Notify all externally-listening goroutines to exit
+			onReload1WG.Wait()        // Wait for them to exit
+			close(config.G.OnReload2) // Notify all reloadable goroutines to exit
+			onReload2WG.Wait()        // Wait for them to exit
 			logging.Reopen()
 
 		case <-sigterm:
 			config.G.Log.System.LogInfo("Received SIGINT/SIGTERM, preparing to terminate")
-			api.Stop()                  // Notify API to stop
-			close(config.G.OnReload1)   // Notify all externally-listening goroutines to exit
-			config.G.OnReload1WG.Wait() // Wait for them to exit
-			close(config.G.OnReload2)   // Notify all reloadable goroutines to exit
-			config.G.OnReload2WG.Wait() // Wait for them to exit
-			close(config.G.OnExit)      // Notify all persistent goroutines to exit
-			config.G.OnExitWG.Wait()    // Wait for them to exit
+			api.Stop()                // Notify API to stop
+			close(config.G.OnReload1) // Notify all externally-listening goroutines to exit
+			onReload1WG.Wait()        // Wait for them to exit
+			close(config.G.OnReload2) // Notify all reloadable goroutines to exit
+			onReload2WG.Wait()        // Wait for them to exit
+			close(config.G.OnExit)    // Notify all persistent goroutines to exit
+			onExitWG.Wait()           // Wait for them to exit
 			repeat = false
 
 		}

@@ -14,6 +14,7 @@ type indexedLine struct {
 
 // PeerList contains an ordered list of Cassabon peers.
 type PeerList struct {
+	wg       *sync.WaitGroup
 	target   chan indexedLine // Channel for forwarding a stat line to a Cassabon peer
 	hostPort string           // Host:port on which the local server is listening
 	peers    []string         // Host:port information for all Cassabon peers (inclusive)
@@ -31,11 +32,13 @@ func (pl *PeerList) IsInitialized() bool {
 }
 
 // start records the current peer list and starts the forwarder goroutine.
-func (pl *PeerList) Start(hostPort string, peers []string) {
+func (pl *PeerList) Start(wg *sync.WaitGroup, hostPort string, peers []string) {
 
 	// Synchronize access by other goroutines.
 	pl.self.Lock()
 	defer pl.self.Unlock()
+
+	pl.wg = wg
 
 	// Create the channel on which stats to forward are received.
 	pl.target = make(chan indexedLine, 1)
@@ -68,7 +71,7 @@ func (pl *PeerList) Start(hostPort string, peers []string) {
 	}
 
 	// Start the forwarder goroutine.
-	config.G.OnReload2WG.Add(1)
+	pl.wg.Add(1)
 	go pl.run()
 }
 
@@ -136,7 +139,7 @@ func (pl *PeerList) run() {
 		select {
 		case <-config.G.OnReload2:
 			config.G.Log.System.LogDebug("PeerList::run received QUIT message")
-			config.G.OnReload2WG.Done()
+			pl.wg.Done()
 			return
 		case il := <-pl.target:
 			if pl.hostPort != pl.peers[il.peerIndex] {
