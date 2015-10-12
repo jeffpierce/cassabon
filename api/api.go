@@ -101,7 +101,7 @@ func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
-	q := config.DataQuery{r.Method, r.Form.Get("query"), ch}
+	q := config.IndexQuery{r.Method, r.Form.Get("query"), ch}
 	config.G.Log.System.LogDebug("Received paths query: %s %s", q.Method, q.Query)
 
 	// Forward the query.
@@ -114,7 +114,7 @@ func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the response to the client.
-	api.sendResponse(w, q)
+	api.sendResponse(w, ch)
 }
 
 // deletePathHandler removes paths from the index store.
@@ -124,7 +124,7 @@ func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *htt
 	ch := make(chan config.APIQueryResponse)
 
 	// Build the query.
-	q := config.DataQuery{r.Method, c.URLParams["path"], ch}
+	q := config.IndexQuery{r.Method, c.URLParams["path"], ch}
 	config.G.Log.System.LogDebug("Received paths query: %s %s", q.Method, q.Query)
 
 	// Forward the query.
@@ -137,7 +137,7 @@ func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *htt
 	}
 
 	// Send the response to the client.
-	api.sendResponse(w, q)
+	api.sendResponse(w, ch)
 }
 
 // getMetricHandler processes requests like "GET /metrics?query=foo".
@@ -148,7 +148,7 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
-	q := config.DataQuery{r.Method, r.Form.Get("query"), ch}
+	q := config.MetricQuery{r.Method, r.Form.Get("query"), ch}
 	config.G.Log.System.LogDebug("Received metrics query: %s %s", q.Method, q.Query)
 
 	// Forward the query.
@@ -161,7 +161,7 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Send the response to the client.
-	api.sendResponse(w, q)
+	api.sendResponse(w, ch)
 }
 
 // deleteMetricHandler removes data from the metrics store.
@@ -171,12 +171,12 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 	ch := make(chan config.APIQueryResponse)
 
 	// Build the query.
-	q := config.DataQuery{r.Method, c.URLParams["metric"], ch}
+	q := config.MetricQuery{r.Method, c.URLParams["metric"], ch}
 	config.G.Log.System.LogDebug("Received metrics query: %s %s", q.Method, q.Query)
 
 	// Forward the query.
 	select {
-	case config.G.Channels.IndexRequest <- q:
+	case config.G.Channels.MetricRequest <- q:
 	default:
 		config.G.Log.System.LogWarn(
 			"Metric DELETE query discarded, IndexRequest channel is full (max %d entries)",
@@ -184,21 +184,21 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 	}
 
 	// Send the response to the client.
-	api.sendResponse(w, q)
+	api.sendResponse(w, ch)
 }
 
-func (api *CassabonAPI) sendResponse(w http.ResponseWriter, q config.DataQuery) {
+func (api *CassabonAPI) sendResponse(w http.ResponseWriter, ch chan config.APIQueryResponse) {
 
 	// Read the response.
 	var resp config.APIQueryResponse
 	select {
-	case resp = <-q.Channel:
+	case resp = <-ch:
 		// Nothing, we have our response.
 	case <-time.After(time.Second):
 		// The query died or wedged; simulate a timeout response.
 		resp = config.APIQueryResponse{config.AQS_ERROR, "query timed out", []byte{}}
 	}
-	close(q.Channel)
+	close(ch)
 
 	// Inspect the response status, and send appropriate response headers/data to client.
 	switch resp.Status {

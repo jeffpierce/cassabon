@@ -376,7 +376,7 @@ func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, t
 }
 
 // query returns the data matched by the supplied query.
-func (sm *StoreManager) query(q config.DataQuery) {
+func (sm *StoreManager) query(q config.MetricQuery) {
 	switch strings.ToLower(q.Method) {
 	case "delete":
 		// TODO
@@ -386,7 +386,7 @@ func (sm *StoreManager) query(q config.DataQuery) {
 }
 
 // query returns the data matched by the supplied query.
-func (sm *StoreManager) queryGET(q config.DataQuery) {
+func (sm *StoreManager) queryGET(q config.MetricQuery) {
 
 	config.G.Log.System.LogDebug("StoreManager::query %v", q.Query)
 

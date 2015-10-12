@@ -25,7 +25,13 @@ const (
 	AQS_ERROR
 )
 
-type DataQuery struct {
+type IndexQuery struct {
+	Method  string                // The HTTP method from the request
+	Query   string                // Query
+	Channel chan APIQueryResponse // Channel to send response back on.
+}
+
+type MetricQuery struct {
 	Method  string                // The HTTP method from the request
 	Query   string                // Query
 	Channel chan APIQueryResponse // Channel to send response back on.
@@ -85,11 +91,11 @@ type Globals struct {
 	Channels struct {
 		MetricStore          chan CarbonMetric
 		MetricStoreChanLen   int
-		MetricRequest        chan DataQuery
+		MetricRequest        chan MetricQuery
 		MetricRequestChanLen int
 		IndexStore           chan CarbonMetric
 		IndexStoreChanLen    int
-		IndexRequest         chan DataQuery
+		IndexRequest         chan IndexQuery
 		IndexRequestChanLen  int
 	}
 
