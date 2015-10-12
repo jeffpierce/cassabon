@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -27,6 +28,9 @@ type runlist struct {
 }
 
 type StoreManager struct {
+
+	// Wait Group for managing orderly reloads and termination.
+	wg *sync.WaitGroup
 
 	// Rollup configuration.
 	// Note: Does not reload on SIGHUP.
@@ -54,17 +58,18 @@ func (sm *StoreManager) Init() {
 	// Initialize private objects.
 	sm.setTimeout = make(chan time.Duration, 0)
 	sm.timeout = make(chan struct{}, 1)
+}
+
+func (sm *StoreManager) Start(wg *sync.WaitGroup) {
 
 	// Start the persistent goroutines.
-	config.G.OnExitWG.Add(2)
+	sm.wg = wg
+	sm.wg.Add(2)
 	go sm.timer()
 	go sm.run()
 
 	// Kick off the timer.
 	sm.setTimeout <- time.Second
-}
-
-func (sm *StoreManager) Start() {
 }
 
 func (sm *StoreManager) resetRollupData() {
@@ -180,7 +185,7 @@ func (sm *StoreManager) run() {
 		case <-config.G.OnExit:
 			config.G.Log.System.LogDebug("StoreManager::run received QUIT message")
 			sm.flush(true)
-			config.G.OnExitWG.Done()
+			sm.wg.Done()
 			return
 		case metric := <-config.G.Channels.DataStore:
 			sm.accumulate(metric)
@@ -198,7 +203,7 @@ func (sm *StoreManager) timer() {
 		select {
 		case <-config.G.OnExit:
 			config.G.Log.System.LogDebug("StoreManager::timer received QUIT message")
-			config.G.OnExitWG.Done()
+			sm.wg.Done()
 			return
 		case duration := <-sm.setTimeout:
 			// Block in this state until a new entry is received.

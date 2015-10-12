@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"sync"
 	"time"
 
 	"github.com/jeffpierce/cassabon/logging"
@@ -81,9 +80,6 @@ type Globals struct {
 	OnReload1       chan struct{}
 	OnReload2       chan struct{}
 	OnExit          chan struct{}
-	OnReload1WG     sync.WaitGroup
-	OnReload2WG     sync.WaitGroup
-	OnExitWG        sync.WaitGroup
 
 	// Channels for communicating between modules.
 	Channels struct {

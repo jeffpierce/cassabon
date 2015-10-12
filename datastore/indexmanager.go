@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"gopkg.in/redis.v3"
 
@@ -22,14 +23,16 @@ type MetricResponse struct {
 }
 
 type IndexManager struct {
+	wg *sync.WaitGroup
 	rc *redis.Client
 }
 
 func (im *IndexManager) Init() {
 }
 
-func (im *IndexManager) Start() {
-	config.G.OnReload2WG.Add(1)
+func (im *IndexManager) Start(wg *sync.WaitGroup) {
+	im.wg = wg
+	im.wg.Add(1)
 	go im.run()
 }
 
@@ -70,7 +73,7 @@ func (im *IndexManager) run() {
 		select {
 		case <-config.G.OnReload2:
 			config.G.Log.System.LogDebug("IndexManager::run received QUIT message")
-			config.G.OnReload2WG.Done()
+			im.wg.Done()
 			return
 		case metric := <-config.G.Channels.IndexStore:
 			im.index(metric.Path)

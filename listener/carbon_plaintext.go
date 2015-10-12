@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jeffpierce/cassabon/config"
@@ -16,6 +17,7 @@ import (
 )
 
 type CarbonPlaintextListener struct {
+	wg              *sync.WaitGroup
 	peerMsg         *regexp.Regexp
 	peerCmdPeerlist *regexp.Regexp
 	peerList        PeerList
@@ -28,7 +30,9 @@ func (cpl *CarbonPlaintextListener) Init() {
 	cpl.peerList.Init()
 }
 
-func (cpl *CarbonPlaintextListener) Start() {
+func (cpl *CarbonPlaintextListener) Start(wg, dependentWG *sync.WaitGroup) {
+
+	cpl.wg = wg
 
 	// After first time through, check whether the peer list changed in any way.
 	var propagatePeerList bool = false
@@ -42,7 +46,7 @@ func (cpl *CarbonPlaintextListener) Start() {
 	}
 
 	// Start the Cassabon peer forwarder goroutine.
-	cpl.peerList.Start(config.G.Carbon.Listen, config.G.Carbon.Peers)
+	cpl.peerList.Start(dependentWG, config.G.Carbon.Listen, config.G.Carbon.Peers)
 	if propagatePeerList {
 		// This must be done AFTER Start() to avoid deadlock.
 		cpl.peerList.PropagatePeerList()
@@ -51,13 +55,13 @@ func (cpl *CarbonPlaintextListener) Start() {
 	// Kick off goroutines to listen for TCP and/or UDP traffic as specified.
 	switch config.G.Carbon.Protocol {
 	case "tcp":
-		config.G.OnReload1WG.Add(1)
+		cpl.wg.Add(1)
 		go cpl.carbonTCP(config.G.Carbon.Listen)
 	case "udp":
-		config.G.OnReload1WG.Add(1)
+		cpl.wg.Add(1)
 		go cpl.carbonUDP(config.G.Carbon.Listen)
 	default:
-		config.G.OnReload1WG.Add(2)
+		cpl.wg.Add(2)
 		go cpl.carbonTCP(config.G.Carbon.Listen)
 		go cpl.carbonUDP(config.G.Carbon.Listen)
 	}
@@ -83,7 +87,7 @@ func (cpl *CarbonPlaintextListener) carbonTCP(hostPort string) {
 		select {
 		case <-config.G.OnReload1:
 			config.G.Log.System.LogDebug("CarbonTCP received QUIT message")
-			config.G.OnReload1WG.Done()
+			cpl.wg.Done()
 			return
 		default:
 			// On receipt of a connection, spawn a goroutine to handle it.
@@ -145,7 +149,7 @@ func (cpl *CarbonPlaintextListener) carbonUDP(hostPort string) {
 		select {
 		case <-config.G.OnReload1:
 			config.G.Log.System.LogDebug("CarbonUDP received QUIT message")
-			config.G.OnReload1WG.Done()
+			cpl.wg.Done()
 			return
 		default:
 			udpConn.SetDeadline(time.Now().Add(time.Duration(config.G.Carbon.Parameters.UDPTimeout) * time.Second))
