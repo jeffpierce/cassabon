@@ -231,6 +231,20 @@ func (sm *StoreManager) timer() {
 	}
 }
 
+// getExpression returns the first expression that matches the supplied path.
+func (sm *StoreManager) getExpression(path string) string {
+	var expr string
+	for _, expr = range sm.rollupPriority {
+		if expr != config.ROLLUP_CATCHALL {
+			if sm.rollup[expr].Expression.MatchString(path) {
+				break
+			}
+		}
+		// Catchall always appears last, and is therefore the default value.
+	}
+	return expr
+}
+
 // accumulate records a metric according to the rollup definitions.
 func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 	config.G.Log.System.LogDebug("StoreManager::accumulate %s=%v", metric.Path, metric.Value)
@@ -240,18 +254,8 @@ func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 	var found bool
 	if currentRollup, found = sm.byPath[metric.Path]; !found {
 
-		// Determine which expression matches this path.
-		var expr string
-		for _, expr = range sm.rollupPriority {
-			if expr != config.ROLLUP_CATCHALL {
-				if sm.rollup[expr].Expression.MatchString(metric.Path) {
-					break
-				}
-			}
-			// Catchall always appears last, and is therefore the default value.
-		}
-
 		// Initialize, and insert the new rollup into both maps.
+		expr := sm.getExpression(metric.Path)
 		currentRollup = new(rollup)
 		currentRollup.expr = expr
 		currentRollup.count = make([]uint64, len(sm.rollup[expr].Windows))
@@ -418,7 +422,8 @@ func (sm *StoreManager) queryGET(q config.MetricQuery) {
 
 	// Determine lookup table and data point step
 	for _, path := range q.Query {
-		for _, window := range config.G.Rollup[sm.byPath[path].expr].Windows {
+		expr := sm.getExpression(path)
+		for _, window := range config.G.Rollup[expr].Windows {
 			if timeDelta < window.Retention {
 				table = window.Table
 				step = int(window.Window.Seconds())
