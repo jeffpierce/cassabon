@@ -135,9 +135,9 @@ func (sm *StoreManager) populateSchema() {
 		ttlfloat, _ = strconv.ParseFloat(ttl, 64)
 		query := fmt.Sprintf(
 			`CREATE TABLE IF NOT EXISTS %s.%s
-                (path text, timestamp timestamp, stat double, PRIMARY KEY (path, timestamp))
+                (path text, time timestamp, stat double, PRIMARY KEY (path, time))
             WITH COMPACT STORAGE
-                AND CLUSTERING ORDER BY (timestamp ASC)
+                AND CLUSTERING ORDER BY (time ASC)
                 AND compaction = {'class': 'org.apache.cassandra.db.compaction.DateTieredCompactionStrategy'}
                 AND compression = {'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
                 AND dclocal_read_repair_chance = 0.1
@@ -379,7 +379,7 @@ func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, t
 		expr, w.Table, ts.Format("15:04:05.000"), path, value, w.Window, w.Retention)
 
 	query := fmt.Sprintf(
-		`INSERT INTO %s.%s (path, timestamp, stat) VALUES (?, ?, ?)`,
+		`INSERT INTO %s.%s (path, time, stat) VALUES (?, ?, ?)`,
 		config.G.Cassandra.Keyspace, w.Table)
 
 	if err := sm.dbClient.Query(query, path, ts, value).Exec(); err != nil {
@@ -412,6 +412,7 @@ func (sm *StoreManager) queryGET(q config.MetricQuery) {
 	var resp config.APIQueryResponse
 	var step int
 	var table string
+	var singleStat float64
 	var statList []float64
 
 	// Initialize series map
@@ -424,18 +425,33 @@ func (sm *StoreManager) queryGET(q config.MetricQuery) {
 	for _, path := range q.Query {
 		expr := sm.getExpression(path)
 		for _, window := range config.G.Rollup[expr].Windows {
+			config.G.Log.System.LogDebug("evaluating %v", window)
+			config.G.Log.System.LogDebug("timeDelta: %d, window.Retention: %d", timeDelta.Seconds(), window.Retention.Seconds())
 			if timeDelta < window.Retention {
 				table = window.Table
 				step = int(window.Window.Seconds())
+				break
 			}
 		}
 
 		// Build query for this stat path
-		query := fmt.Sprintf(`SELECT stat FROM %s.%s WHERE timestamp >= %v AND timestamp <= %v`,
-			config.G.Cassandra.Keyspace, table, time.Unix(q.From, 0), time.Unix(q.To, 0))
+		query := fmt.Sprintf(`SELECT stat FROM %s.%s WHERE path = ? AND time >= ? AND time <= ?`,
+			config.G.Cassandra.Keyspace, table)
+
+		config.G.Log.System.LogDebug("Query: %s", query)
 
 		// Populate statList with returned stats.
-		sm.dbClient.Query(query).Scan(&statList)
+		iter := sm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
+		for iter.Scan(&singleStat) {
+			config.G.Log.System.LogDebug("singleStat: %d", singleStat)
+			statList = append(statList, singleStat)
+		}
+
+		config.G.Log.System.LogDebug("statList: %v", statList)
+
+		if err := iter.Close(); err != nil {
+			config.G.Log.System.LogError("Error closing stat iteration: %s", err.Error())
+		}
 
 		// Append to series portion of response.
 		series[path] = statList
