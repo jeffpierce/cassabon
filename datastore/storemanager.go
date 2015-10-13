@@ -416,10 +416,8 @@ func (sm *StoreManager) queryGET(q config.MetricQuery) {
 	// Get difference between now and q.From to determine which rollup table to query
 	timeDelta := time.Since(time.Unix(q.From, 0))
 
-	// TODO: Build the query response.
-	// resp = config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
+	// Determine lookup table and data point step
 	for _, path := range q.Query {
-		// Determine lookup table and data point step
 		for _, window := range config.G.Rollup[sm.byPath[path].expr].Windows {
 			if timeDelta < window.Retention {
 				table = window.Table
