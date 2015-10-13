@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -25,6 +26,14 @@ type rollup struct {
 type runlist struct {
 	nextWriteTime []time.Time        // The next write time for each rollup bucket
 	path          map[string]*rollup // The rollup data for each path matched by the expression
+}
+
+// MetricResponse defines the response structure that will be converted into JSON before being returned.
+type MetricResponse struct {
+	From   int64                `json:"from"`
+	To     int64                `json:"to"`
+	Step   int                  `json:"step"`
+	Series map[string][]float64 `json:"series"`
 }
 
 type StoreManager struct {
@@ -126,9 +135,9 @@ func (sm *StoreManager) populateSchema() {
 		ttlfloat, _ = strconv.ParseFloat(ttl, 64)
 		query := fmt.Sprintf(
 			`CREATE TABLE IF NOT EXISTS %s.%s
-                (path text, timestamp timestamp, stat double, PRIMARY KEY (path, timestamp))
+                (path text, time timestamp, stat double, PRIMARY KEY (path, time))
             WITH COMPACT STORAGE
-                AND CLUSTERING ORDER BY (timestamp ASC)
+                AND CLUSTERING ORDER BY (time ASC)
                 AND compaction = {'class': 'org.apache.cassandra.db.compaction.DateTieredCompactionStrategy'}
                 AND compression = {'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
                 AND dclocal_read_repair_chance = 0.1
@@ -222,6 +231,20 @@ func (sm *StoreManager) timer() {
 	}
 }
 
+// getExpression returns the first expression that matches the supplied path.
+func (sm *StoreManager) getExpression(path string) string {
+	var expr string
+	for _, expr = range sm.rollupPriority {
+		if expr != config.ROLLUP_CATCHALL {
+			if sm.rollup[expr].Expression.MatchString(path) {
+				break
+			}
+		}
+		// Catchall always appears last, and is therefore the default value.
+	}
+	return expr
+}
+
 // accumulate records a metric according to the rollup definitions.
 func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 	config.G.Log.System.LogDebug("StoreManager::accumulate %s=%v", metric.Path, metric.Value)
@@ -231,18 +254,8 @@ func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 	var found bool
 	if currentRollup, found = sm.byPath[metric.Path]; !found {
 
-		// Determine which expression matches this path.
-		var expr string
-		for _, expr = range sm.rollupPriority {
-			if expr != config.ROLLUP_CATCHALL {
-				if sm.rollup[expr].Expression.MatchString(metric.Path) {
-					break
-				}
-			}
-			// Catchall always appears last, and is therefore the default value.
-		}
-
 		// Initialize, and insert the new rollup into both maps.
+		expr := sm.getExpression(metric.Path)
 		currentRollup = new(rollup)
 		currentRollup.expr = expr
 		currentRollup.count = make([]uint64, len(sm.rollup[expr].Windows))
@@ -366,7 +379,7 @@ func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, t
 		expr, w.Table, ts.Format("15:04:05.000"), path, value, w.Window, w.Retention)
 
 	query := fmt.Sprintf(
-		`INSERT INTO %s.%s (path, timestamp, stat) VALUES (?, ?, ?)`,
+		`INSERT INTO %s.%s (path, time, stat) VALUES (?, ?, ?)`,
 		config.G.Cassandra.Keyspace, w.Table)
 
 	if err := sm.dbClient.Query(query, path, ts, value).Exec(); err != nil {
@@ -397,9 +410,63 @@ func (sm *StoreManager) queryGET(q config.MetricQuery) {
 	}
 
 	var resp config.APIQueryResponse
+	var step int
+	var table string
+	var singleStat float64
+	var statList []float64
 
-	// TODO: Build the query response.
-	resp = config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
+	// Initialize series map
+	series := map[string][]float64{}
+
+	// Get difference between now and q.From to determine which rollup table to query
+	timeDelta := time.Since(time.Unix(q.From, 0))
+
+	// Determine lookup table and data point step
+	for _, path := range q.Query {
+		expr := sm.getExpression(path)
+		for _, window := range config.G.Rollup[expr].Windows {
+			config.G.Log.System.LogDebug("evaluating %v", window)
+			config.G.Log.System.LogDebug("timeDelta: %d, window.Retention: %d", timeDelta.Seconds(), window.Retention.Seconds())
+			if timeDelta < window.Retention {
+				table = window.Table
+				step = int(window.Window.Seconds())
+				break
+			}
+		}
+
+		// Build query for this stat path
+		query := fmt.Sprintf(`SELECT stat FROM %s.%s WHERE path = ? AND time >= ? AND time <= ?`,
+			config.G.Cassandra.Keyspace, table)
+
+		config.G.Log.System.LogDebug("Query: %s", query)
+
+		// Populate statList with returned stats.
+		iter := sm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
+		for iter.Scan(&singleStat) {
+			config.G.Log.System.LogDebug("singleStat: %d", singleStat)
+			statList = append(statList, singleStat)
+		}
+
+		config.G.Log.System.LogDebug("statList: %v", statList)
+
+		if err := iter.Close(); err != nil {
+			config.G.Log.System.LogError("Error closing stat iteration: %s", err.Error())
+		}
+
+		// Append to series portion of response.
+		series[path] = statList
+	}
+
+	response := MetricResponse{
+		q.From,
+		q.To,
+		step,
+		series,
+	}
+
+	jsonResp, _ := json.Marshal(response)
+
+	resp = config.APIQueryResponse{config.AQS_OK, "", jsonResp}
 
 	// For testing: time.Sleep(time.Second * 2)
 

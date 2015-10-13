@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -148,8 +149,10 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 
 	// Extract the query from the request URI.
 	_ = r.ParseForm()
-	q := config.MetricQuery{r.Method, []string{}, 0, 0, ch}
-	config.G.Log.System.LogDebug("Received metrics query: %s %v", q.Method, q.Query)
+	from, _ := strconv.Atoi(r.Form.Get("from"))
+	to, _ := strconv.Atoi(r.Form.Get("to"))
+	q := config.MetricQuery{r.Method, r.Form["path"], int64(from), int64(to), ch}
+	config.G.Log.System.LogDebug("Received metrics query: %s %v %d %d", q.Method, q.Query, q.From, q.To)
 
 	// Forward the query.
 	select {
@@ -171,7 +174,7 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 	ch := make(chan config.APIQueryResponse)
 
 	// Build the query.
-	q := config.MetricQuery{r.Method, []string{}, 0, 0, ch}
+	q := config.MetricQuery{r.Method, r.Form["path"], 0, 0, ch}
 	config.G.Log.System.LogDebug("Received metrics query: %s %v", q.Method, q.Query)
 
 	// Forward the query.

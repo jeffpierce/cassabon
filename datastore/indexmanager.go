@@ -14,8 +14,8 @@ import (
 	"github.com/jeffpierce/cassabon/middleware"
 )
 
-// MetricResponse defines the individual elements returned as an array by "GET /paths".
-type MetricResponse struct {
+// IndexResponse defines the individual elements returned as an array by "GET /paths".
+type IndexResponse struct {
 	Path   string `json:"path"`
 	Depth  int    `json:"depth"`
 	Tenant string `json:"tenant"`
@@ -305,13 +305,13 @@ func (im *IndexManager) complexWild(splitWild []string, l int) config.APIQueryRe
 // processQueryResults converts the results to JSON text.
 func (im *IndexManager) processQueryResults(results []string, l int) []byte {
 
-	var responseList []MetricResponse
+	var responseList []IndexResponse
 
 	// Process the result into a map, make it a string, send it along is the goal here.
 	for _, match := range results {
 		decodedString := strings.Split(match, ":")
 		isLeaf, _ := strconv.ParseBool(decodedString[2])
-		m := MetricResponse{decodedString[1], l, "", isLeaf}
+		m := IndexResponse{decodedString[1], l, "", isLeaf}
 		responseList = append(responseList, m)
 	}
 
