@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -25,6 +26,14 @@ type rollup struct {
 type runlist struct {
 	nextWriteTime []time.Time        // The next write time for each rollup bucket
 	path          map[string]*rollup // The rollup data for each path matched by the expression
+}
+
+// MetricResponse defines the response structure that will be converted into JSON before being returned.
+type MetricResponse struct {
+	From   int64                `json:"from"`
+	To     int64                `json:"to"`
+	Step   int                  `json:"step"`
+	Series map[string][]float64 `json:"series"`
 }
 
 type StoreManager struct {
@@ -397,9 +406,48 @@ func (sm *StoreManager) queryGET(q config.MetricQuery) {
 	}
 
 	var resp config.APIQueryResponse
+	var step int
+	var table string
+	var statList []float64
+
+	// Initialize series map
+	series := map[string][]float64{}
+
+	// Get difference between now and q.From to determine which rollup table to query
+	timeDelta := time.Since(time.Unix(q.From, 0))
 
 	// TODO: Build the query response.
-	resp = config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
+	// resp = config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
+	for _, path := range q.Query {
+		// Determine lookup table and data point step
+		for _, window := range config.G.Rollup[sm.byPath[path].expr].Windows {
+			if timeDelta < window.Retention {
+				table = window.Table
+				step = int(window.Window.Seconds())
+			}
+		}
+
+		// Build query for this stat path
+		query := fmt.Sprintf(`SELECT stat FROM %s.%s WHERE timestamp >= %v AND timestamp <= %v`,
+			config.G.Cassandra.Keyspace, table, time.Unix(q.From, 0), time.Unix(q.To, 0))
+
+		// Populate statList with returned stats.
+		sm.dbClient.Query(query).Scan(&statList)
+
+		// Append to series portion of response.
+		series[path] = statList
+	}
+
+	response := MetricResponse{
+		q.From,
+		q.To,
+		step,
+		series,
+	}
+
+	jsonResp, _ := json.Marshal(response)
+
+	resp = config.APIQueryResponse{config.AQS_OK, "", jsonResp}
 
 	// For testing: time.Sleep(time.Second * 2)
 

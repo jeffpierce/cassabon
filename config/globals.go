@@ -34,8 +34,8 @@ type IndexQuery struct {
 type MetricQuery struct {
 	Method  string                // The HTTP method from the request
 	Query   []string              // Query
-	From    uint64                // Start of time window for metrics range
-	To      uint64                // End of time window for metrics range
+	From    int64                 // Start of time window for metrics range
+	To      int64                 // End of time window for metrics range
 	Channel chan APIQueryResponse // Channel to send response back on.
 }
 
