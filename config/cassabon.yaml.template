@@ -35,6 +35,11 @@ carbon:
 api:
     listen: "127.0.0.1:8080"
     healthcheckfile: "config/healthcheckfile"
+    timeouts:
+        getindex: 1
+        deleteindex: 1
+        getmetric: 30
+        deletemetric: 1
 cassandra:
     hosts:
         - "127.0.0.1"

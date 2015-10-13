@@ -128,6 +128,12 @@ type Globals struct {
 	API struct {
 		Listen          string // HTTP API listens on this address:port
 		HealthCheckFile string // Health check file.
+		Timeouts        struct {
+			GetIndex     time.Duration
+			DeleteIndex  time.Duration
+			GetMetric    time.Duration
+			DeleteMetric time.Duration
+		}
 	}
 
 	Cassandra CassandraSettings

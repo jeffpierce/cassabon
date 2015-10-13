@@ -115,7 +115,7 @@ func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send the response to the client.
-	api.sendResponse(w, ch)
+	api.sendResponse(w, ch, config.G.API.Timeouts.GetIndex)
 }
 
 // deletePathHandler removes paths from the index store.
@@ -138,7 +138,7 @@ func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *htt
 	}
 
 	// Send the response to the client.
-	api.sendResponse(w, ch)
+	api.sendResponse(w, ch, config.G.API.Timeouts.DeleteIndex)
 }
 
 // getMetricHandler processes requests like "GET /metrics?query=foo".
@@ -164,7 +164,7 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Send the response to the client.
-	api.sendResponse(w, ch)
+	api.sendResponse(w, ch, config.G.API.Timeouts.GetMetric)
 }
 
 // deleteMetricHandler removes data from the metrics store.
@@ -187,17 +187,17 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 	}
 
 	// Send the response to the client.
-	api.sendResponse(w, ch)
+	api.sendResponse(w, ch, config.G.API.Timeouts.DeleteMetric)
 }
 
-func (api *CassabonAPI) sendResponse(w http.ResponseWriter, ch chan config.APIQueryResponse) {
+func (api *CassabonAPI) sendResponse(w http.ResponseWriter, ch chan config.APIQueryResponse, timeout time.Duration) {
 
 	// Read the response.
 	var resp config.APIQueryResponse
 	select {
 	case resp = <-ch:
 		// Nothing, we have our response.
-	case <-time.After(time.Second):
+	case <-time.After(time.Second * timeout):
 		// The query died or wedged; simulate a timeout response.
 		resp = config.APIQueryResponse{config.AQS_ERROR, "query timed out", []byte{}}
 	}

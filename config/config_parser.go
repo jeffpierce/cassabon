@@ -38,6 +38,12 @@ type CassabonConfig struct {
 	API struct {
 		Listen          string // HTTP API listens on this address:port
 		HealthCheckFile string // Location of healthcheck file.
+		Timeouts        struct {
+			GetIndex     uint
+			DeleteIndex  uint
+			GetMetric    uint
+			DeleteMetric uint
+		}
 	}
 	Cassandra CassandraSettings
 	Redis     RedisSettings
@@ -222,6 +228,22 @@ func LoadRefreshableValues() {
 	// Copy in the API configuration values.
 	G.API.Listen = rawCassabonConfig.API.Listen
 	G.API.HealthCheckFile = rawCassabonConfig.API.HealthCheckFile
+	if rawCassabonConfig.API.Timeouts.GetIndex < 1 {
+		rawCassabonConfig.API.Timeouts.GetIndex = 1
+	}
+	if rawCassabonConfig.API.Timeouts.DeleteIndex < 1 {
+		rawCassabonConfig.API.Timeouts.DeleteIndex = 1
+	}
+	if rawCassabonConfig.API.Timeouts.GetMetric < 1 {
+		rawCassabonConfig.API.Timeouts.GetMetric = 1
+	}
+	if rawCassabonConfig.API.Timeouts.DeleteMetric < 1 {
+		rawCassabonConfig.API.Timeouts.DeleteMetric = 1
+	}
+	G.API.Timeouts.GetIndex = time.Duration(time.Duration(rawCassabonConfig.API.Timeouts.GetIndex) * time.Second)
+	G.API.Timeouts.DeleteIndex = time.Duration(time.Duration(rawCassabonConfig.API.Timeouts.DeleteIndex) * time.Second)
+	G.API.Timeouts.GetMetric = time.Duration(time.Duration(rawCassabonConfig.API.Timeouts.GetMetric) * time.Second)
+	G.API.Timeouts.DeleteMetric = time.Duration(time.Duration(rawCassabonConfig.API.Timeouts.DeleteMetric) * time.Second)
 
 	// Copy in the Cassandra database connection values.
 	G.Cassandra = rawCassabonConfig.Cassandra
