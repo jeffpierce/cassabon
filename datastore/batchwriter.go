@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+
+	"github.com/jeffpierce/cassabon/logging"
 )
 
 type batchWriter struct {
@@ -51,8 +53,11 @@ func (bw *batchWriter) Append(path string, ts time.Time, value float64) error {
 // Write
 func (bw *batchWriter) Write() error {
 	if bw.stmtCount > 0 {
+		bwt := time.Now()
 		bw.stmtCount = 0
-		return bw.dbClient.ExecuteBatch(bw.batch)
+		err := bw.dbClient.ExecuteBatch(bw.batch)
+		logging.Statsd.Client.TimingDuration("storemgr.db.write", time.Since(bwt), 1.0)
+		return err
 	} else {
 		return nil
 	}

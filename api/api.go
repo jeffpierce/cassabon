@@ -119,6 +119,7 @@ func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 		config.G.Log.System.LogWarn(
 			"Index query discarded, IndexRequest channel is full (max %d entries)",
 			config.G.Channels.IndexRequestChanLen)
+		logging.Statsd.Client.Inc("api.err.path.get", 1, 1.0)
 	}
 
 	// Send the response to the client.
@@ -144,6 +145,7 @@ func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *htt
 		config.G.Log.System.LogWarn(
 			"Index DELETE query discarded, IndexRequest channel is full (max %d entries)",
 			config.G.Channels.IndexRequestChanLen)
+		logging.Statsd.Client.Inc("api.err.path.delete", 1, 1.0)
 	}
 
 	// Send the response to the client.
@@ -172,6 +174,7 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 		config.G.Log.System.LogWarn(
 			"Metrics query discarded, MetricRequest channel is full (max %d entries)",
 			config.G.Channels.MetricRequestChanLen)
+		logging.Statsd.Client.Inc("api.err.metrics.get", 1, 1.0)
 	}
 
 	// Send the response to the client.
@@ -197,6 +200,7 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 		config.G.Log.System.LogWarn(
 			"Metric DELETE query discarded, IndexRequest channel is full (max %d entries)",
 			config.G.Channels.IndexRequestChanLen)
+		logging.Statsd.Client.Inc("api.err.metrics.delete", 1, 1.0)
 	}
 
 	// Send the response to the client.

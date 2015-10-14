@@ -7,10 +7,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/redis.v3"
 
 	"github.com/jeffpierce/cassabon/config"
+	"github.com/jeffpierce/cassabon/logging"
 	"github.com/jeffpierce/cassabon/middleware"
 )
 
@@ -86,9 +88,11 @@ func (im *IndexManager) run() {
 // IndexMetricPath takes a metric path string and redis client, starts a pipeline, splits the metric,
 // and sends it off to be processed by processMetricPath().
 func (im *IndexManager) index(path string) {
+	it := time.Now()
 	config.G.Log.System.LogDebug("IndexManager::index path=%s", path)
 	splitPath := strings.Split(path, ".")
 	im.processMetricPath(splitPath, len(splitPath), true)
+	logging.Statsd.Client.TimingDuration("indexmgr.index", time.Since(it), 1.0)
 }
 
 // processMetricPath recursively indexes the metric path via the redis pipeline.
@@ -126,6 +130,7 @@ func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLea
 	if err != nil {
 		// How do we want to degrade gracefully when this fails?
 		config.G.Log.System.LogError("Redis error: %s", err.Error())
+		logging.Statsd.Client.Inc("indexmgr.db.err.write", 1, 1.0)
 	}
 }
 
@@ -133,9 +138,13 @@ func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLea
 func (im *IndexManager) query(q config.IndexQuery) {
 	switch strings.ToLower(q.Method) {
 	case "delete":
+		qdt := time.Now()
 		// TODO
+		logging.Statsd.Client.TimingDuration("indexmgr.query.delete", time.Since(qdt), 1.0)
 	default:
+		qgt := time.Now()
 		im.queryGET(q)
+		logging.Statsd.Client.TimingDuration("indexmgr.query.get", time.Since(qgt), 1.0)
 	}
 }
 
@@ -213,6 +222,7 @@ func (im *IndexManager) noWild(q string, l int) config.APIQueryResponse {
 
 	if err != nil {
 		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
+		logging.Statsd.Client.Inc("indexmgr.err.db.read", 1, 1.0)
 		return config.APIQueryResponse{config.AQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
@@ -238,6 +248,7 @@ func (im *IndexManager) simpleWild(q string, l int) config.APIQueryResponse {
 
 	if err != nil {
 		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
+		logging.Statsd.Client.Inc("indexmgr.err.db.read", 1, 1.0)
 		return config.APIQueryResponse{config.AQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
@@ -270,6 +281,7 @@ func (im *IndexManager) complexWild(splitWild []string, l int) config.APIQueryRe
 
 	if err != nil {
 		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
+		logging.Statsd.Client.Inc("indexmgr.err.db.read", 1, 1.0)
 		return config.APIQueryResponse{config.AQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
@@ -284,6 +296,7 @@ func (im *IndexManager) complexWild(splitWild []string, l int) config.APIQueryRe
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not compile %s into regex: %s", rawRegex, err.Error())
 		config.G.Log.System.LogWarn(errMsg)
+		logging.Statsd.Client.Inc("indexmgr.err.regex", 1, 1.0)
 		return config.APIQueryResponse{config.AQS_BADREQUEST, errMsg, []byte{}}
 	}
 
