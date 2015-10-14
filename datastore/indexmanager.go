@@ -139,11 +139,11 @@ func (im *IndexManager) query(q config.IndexQuery) {
 	case "delete":
 		qdt := time.Now()
 		// TODO
-		logging.Statsd.Client.TimingDuration(time.Since(qdt), "indexmgr.query.delete", 1.0)
+		logging.Statsd.Client.TimingDuration("indexmgr.query.delete", time.Since(qdt), 1.0)
 	default:
 		qgt := time.Now()
 		im.queryGET(q)
-		logging.Statsd.Client.TimingDuration(time.Since(qgt), "indexmgr.query.get", 1.0)
+		logging.Statsd.Client.TimingDuration("indexmgr.query.get", time.Since(qgt), 1.0)
 	}
 }
 

@@ -52,12 +52,13 @@ func (bw *batchWriter) Append(path string, ts time.Time, value float64) error {
 
 // Write
 func (bw *batchWriter) Write() error {
-	bwt := time.Now()
 	if bw.stmtCount > 0 {
+		bwt := time.Now()
 		bw.stmtCount = 0
-		return bw.dbClient.ExecuteBatch(bw.batch)
+		err := bw.dbClient.ExecuteBatch(bw.batch)
+		logging.Statsd.Client.TimingDuration("db.write", time.Since(bwt), 1.0)
+		return err
 	} else {
 		return nil
 	}
-	logging.Statsd.Client.TimingDuration("db.write", time.Since(bwt), 1.0)
 }
