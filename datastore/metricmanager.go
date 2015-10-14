@@ -36,7 +36,7 @@ type MetricResponse struct {
 	Series map[string][]float64 `json:"series"`
 }
 
-type StoreManager struct {
+type MetricManager struct {
 
 	// Wait Group for managing orderly reloads and termination.
 	wg *sync.WaitGroup
@@ -58,36 +58,36 @@ type StoreManager struct {
 	byExpr map[string]*runlist // Stats, by path within expression, for rollup processing
 }
 
-func (sm *StoreManager) Init() {
+func (mm *MetricManager) Init() {
 
 	// Copy in the configuration (requires hard restart to refresh).
-	sm.rollupPriority = config.G.RollupPriority
-	sm.rollup = config.G.Rollup
+	mm.rollupPriority = config.G.RollupPriority
+	mm.rollup = config.G.Rollup
 
 	// Initialize private objects.
-	sm.setTimeout = make(chan time.Duration, 0)
-	sm.timeout = make(chan struct{}, 1)
+	mm.setTimeout = make(chan time.Duration, 0)
+	mm.timeout = make(chan struct{}, 1)
 }
 
-func (sm *StoreManager) Start(wg *sync.WaitGroup) {
+func (mm *MetricManager) Start(wg *sync.WaitGroup) {
 
 	// Start the persistent goroutines.
-	sm.wg = wg
-	sm.wg.Add(2)
-	go sm.timer()
-	go sm.run()
+	mm.wg = wg
+	mm.wg.Add(2)
+	go mm.timer()
+	go mm.run()
 
 	// Kick off the timer.
-	sm.setTimeout <- time.Second
+	mm.setTimeout <- time.Second
 }
 
-func (sm *StoreManager) resetRollupData() {
+func (mm *MetricManager) resetRollupData() {
 
 	// Initialize rollup data structures.
-	sm.byPath = make(map[string]*rollup)
-	sm.byExpr = make(map[string]*runlist)
+	mm.byPath = make(map[string]*rollup)
+	mm.byExpr = make(map[string]*runlist)
 	baseTime := time.Now()
-	for expr, rollupdef := range sm.rollup {
+	for expr, rollupdef := range mm.rollup {
 		// For each expression, provide a place to record all the paths that it matches.
 		rl := new(runlist)
 		rl.nextWriteTime = make([]time.Time, len(rollupdef.Windows))
@@ -96,15 +96,15 @@ func (sm *StoreManager) resetRollupData() {
 		for i, v := range rollupdef.Windows {
 			rl.nextWriteTime[i] = nextTimeBoundary(baseTime, v.Window)
 		}
-		sm.byExpr[expr] = rl
+		mm.byExpr[expr] = rl
 	}
 }
 
 // populateSchema ensures that all necessary Cassandra setup has been completed.
-func (sm *StoreManager) populateSchema() {
+func (mm *MetricManager) populateSchema() {
 
 	// Create the keyspace if it does not exist.
-	conn := sm.dbClient.Pool.Pick(sm.dbClient.Query(""))
+	conn := mm.dbClient.Pool.Pick(mm.dbClient.Query(""))
 	if err := conn.UseKeyspace(config.G.Cassandra.Keyspace); err != nil {
 		// Note: "USE <keyspace>" isn't allowed, and conn.UseKeyspace() isn't sticky.
 		config.G.Log.System.LogInfo("Keyspace not found: %s", err.Error())
@@ -116,14 +116,14 @@ func (sm *StoreManager) populateSchema() {
 			"CREATE KEYSPACE %s WITH replication = {'class':'%s'%s}",
 			config.G.Cassandra.Keyspace, config.G.Cassandra.Strategy, options)
 		config.G.Log.System.LogDebug(query)
-		if err := sm.dbClient.Query(query).Exec(); err != nil {
+		if err := mm.dbClient.Query(query).Exec(); err != nil {
 			config.G.Log.System.LogFatal("Could not create keyspace: %s", err.Error())
 		}
 		config.G.Log.System.LogInfo("Keyspace %q created", config.G.Cassandra.Keyspace)
 	}
 
 	// Create tables if they do not exist
-	ksmd, _ := sm.dbClient.KeyspaceMetadata(config.G.Cassandra.Keyspace)
+	ksmd, _ := mm.dbClient.KeyspaceMetadata(config.G.Cassandra.Keyspace)
 	for _, table := range config.G.RollupTables {
 		if ksmd != nil {
 			if _, found := ksmd.Tables[table]; found {
@@ -151,77 +151,77 @@ func (sm *StoreManager) populateSchema() {
 		config.G.Log.System.LogDebug(query)
 		config.G.Log.System.LogInfo("Creating table %q", table)
 
-		if err := sm.dbClient.Query(query).Exec(); err != nil {
+		if err := mm.dbClient.Query(query).Exec(); err != nil {
 			config.G.Log.System.LogFatal("Table %q creation failed: %s", table, err.Error())
 		}
 	}
 }
 
-func (sm *StoreManager) run() {
+func (mm *MetricManager) run() {
 
 	defer config.G.OnPanic()
 
 	// Perform first-time initialization of rollup data accumulation structures.
-	sm.resetRollupData()
+	mm.resetRollupData()
 
 	// Open connection to the Cassandra database here, so we can defer the close.
 	var err error
-	config.G.Log.System.LogDebug("StoreManager initializing Cassandra client")
-	sm.dbClient, err = middleware.CassandraSession(
+	config.G.Log.System.LogDebug("MetricManager initializing Cassandra client")
+	mm.dbClient, err = middleware.CassandraSession(
 		config.G.Cassandra.Hosts,
 		config.G.Cassandra.Port,
 		"",
 	)
 	if err != nil {
 		// Without Cassandra client we can't do our job, so log, whine, and crash.
-		config.G.Log.System.LogFatal("StoreManager unable to connect to Cassandra at %v, port %s: %s",
+		config.G.Log.System.LogFatal("MetricManager unable to connect to Cassandra at %v, port %s: %s",
 			config.G.Cassandra.Hosts, config.G.Cassandra.Port, err.Error())
 	}
 
-	defer sm.dbClient.Close()
-	config.G.Log.System.LogDebug("StoreManager Cassandra client initialized")
+	defer mm.dbClient.Close()
+	config.G.Log.System.LogDebug("MetricManager Cassandra client initialized")
 
-	config.G.Log.System.LogDebug("StoreManager Cassandra Keyspace configuration starting...")
-	sm.populateSchema()
+	config.G.Log.System.LogDebug("MetricManager Cassandra Keyspace configuration starting...")
+	mm.populateSchema()
 
 	for {
 		select {
 		case <-config.G.OnPeerChangeReq:
-			config.G.Log.System.LogDebug("StoreManager::run received PEERCHANGE message")
-			sm.flush(true)
-			sm.resetRollupData()
+			config.G.Log.System.LogDebug("MetricManager::run received PEERCHANGE message")
+			mm.flush(true)
+			mm.resetRollupData()
 			config.G.OnPeerChangeRsp <- struct{}{} // Unblock sender
 		case <-config.G.OnExit:
-			config.G.Log.System.LogDebug("StoreManager::run received QUIT message")
-			sm.flush(true)
-			sm.wg.Done()
+			config.G.Log.System.LogDebug("MetricManager::run received QUIT message")
+			mm.flush(true)
+			mm.wg.Done()
 			return
 		case metric := <-config.G.Channels.MetricStore:
-			sm.accumulate(metric)
+			mm.accumulate(metric)
 		case query := <-config.G.Channels.MetricRequest:
-			go sm.query(query)
-		case <-sm.timeout:
-			sm.flush(false)
+			go mm.query(query)
+		case <-mm.timeout:
+			mm.flush(false)
 		}
 	}
 }
 
 // timer sends a message on the "timeout" channel after the specified duration.
-func (sm *StoreManager) timer() {
+func (mm *MetricManager) timer() {
 	for {
 		select {
 		case <-config.G.OnExit:
-			config.G.Log.System.LogDebug("StoreManager::timer received QUIT message")
-			sm.wg.Done()
+			config.G.Log.System.LogDebug("MetricManager::timer received QUIT message")
+			mm.wg.Done()
 			return
-		case duration := <-sm.setTimeout:
+		case duration := <-mm.setTimeout:
 			// Block in this state until a new entry is received.
 			select {
 			case <-config.G.OnExit:
 				// Nothing; do handling above on next iteration.
 			case <-time.After(duration):
 				select {
-				case sm.timeout <- struct{}{}:
+				case mm.timeout <- struct{}{}:
 					// Timeout sent.
 				default:
 					// Do not block.
@@ -232,11 +232,11 @@ func (sm *StoreManager) timer() {
 }
 
 // getExpression returns the first expression that matches the supplied path.
-func (sm *StoreManager) getExpression(path string) string {
+func (mm *MetricManager) getExpression(path string) string {
 	var expr string
-	for _, expr = range sm.rollupPriority {
+	for _, expr = range mm.rollupPriority {
 		if expr != config.ROLLUP_CATCHALL {
-			if sm.rollup[expr].Expression.MatchString(path) {
+			if mm.rollup[expr].Expression.MatchString(path) {
 				break
 			}
 		}
@@ -246,29 +246,29 @@ func (sm *StoreManager) getExpression(path string) string {
 }
 
 // accumulate records a metric according to the rollup definitions.
-func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
-	config.G.Log.System.LogDebug("StoreManager::accumulate %s=%v", metric.Path, metric.Value)
+func (mm *MetricManager) accumulate(metric config.CarbonMetric) {
+	config.G.Log.System.LogDebug("MetricManager::accumulate %s=%v", metric.Path, metric.Value)
 
 	// Locate the metric in the map.
 	var currentRollup *rollup
 	var found bool
-	if currentRollup, found = sm.byPath[metric.Path]; !found {
+	if currentRollup, found = mm.byPath[metric.Path]; !found {
 
 		// Initialize, and insert the new rollup into both maps.
-		expr := sm.getExpression(metric.Path)
+		expr := mm.getExpression(metric.Path)
 		currentRollup = new(rollup)
 		currentRollup.expr = expr
-		currentRollup.count = make([]uint64, len(sm.rollup[expr].Windows))
-		currentRollup.value = make([]float64, len(sm.rollup[expr].Windows))
-		sm.byPath[metric.Path] = currentRollup
-		sm.byExpr[expr].path[metric.Path] = currentRollup
+		currentRollup.count = make([]uint64, len(mm.rollup[expr].Windows))
+		currentRollup.value = make([]float64, len(mm.rollup[expr].Windows))
+		mm.byPath[metric.Path] = currentRollup
+		mm.byExpr[expr].path[metric.Path] = currentRollup
 
 		// Send the entry off for writing to the path index.
 		config.G.Channels.IndexStore <- metric
 	}
 
 	// Apply the incoming metric to each rollup bucket.
-	switch sm.rollup[currentRollup.expr].Method {
+	switch mm.rollup[currentRollup.expr].Method {
 	case config.AVERAGE:
 		for i, v := range currentRollup.value {
 			currentRollup.value[i] = (v*float64(currentRollup.count[i]) + metric.Value) /
@@ -299,11 +299,11 @@ func (sm *StoreManager) accumulate(metric config.CarbonMetric) {
 }
 
 // flush persists the accumulated metrics to the database.
-func (sm *StoreManager) flush(terminating bool) {
-	config.G.Log.System.LogDebug("StoreManager::flush terminating=%v", terminating)
+func (mm *MetricManager) flush(terminating bool) {
+	config.G.Log.System.LogDebug("MetricManager::flush terminating=%v", terminating)
 
 	// Report the current length of the list of unique paths seen.
-	logging.Statsd.Client.Gauge("path.count", int64(len(sm.byPath)), 1.0)
+	logging.Statsd.Client.Gauge("path.count", int64(len(mm.byPath)), 1.0)
 
 	// Use a consistent current time for all tests in this cycle.
 	baseTime := time.Now()
@@ -313,10 +313,10 @@ func (sm *StoreManager) flush(terminating bool) {
 
 	// Set up the database batch writer.
 	bw := batchWriter{}
-	bw.Init(sm.dbClient, config.G.Cassandra.Keyspace, config.G.Cassandra.BatchSize)
+	bw.Init(mm.dbClient, config.G.Cassandra.Keyspace, config.G.Cassandra.BatchSize)
 
 	// Walk the set of expressions.
-	for expr, runList := range sm.byExpr {
+	for expr, runList := range mm.byExpr {
 
 		// For each expression, inspect each rollup window.
 		// Note: Each window is written to a different table.
@@ -333,21 +333,21 @@ func (sm *StoreManager) flush(terminating bool) {
 				}
 
 				// Iterate over all the paths that match the current expression.
-				bw.Prepare(sm.rollup[expr].Windows[i].Table)
+				bw.Prepare(mm.rollup[expr].Windows[i].Table)
 				for path, rollup := range runList.path {
 
 					if rollup.count[i] > 0 {
 						// Data has accumulated while this window was open; write it.
 						config.G.Log.Carbon.LogInfo(
 							"match=%q tbl=%s ts=%v path=%s val=%.4f win=%v ret=%v ",
-							expr, sm.rollup[expr].Windows[i].Table,
+							expr, mm.rollup[expr].Windows[i].Table,
 							statTime.Format("15:04:05.000"), path, rollup.value[i],
-							sm.rollup[expr].Windows[i].Window, sm.rollup[expr].Windows[i].Retention)
+							mm.rollup[expr].Windows[i].Window, mm.rollup[expr].Windows[i].Retention)
 
 						// This will cause a write if we have reached our maximum batch size.
 						if err := bw.Append(path, statTime, rollup.value[i]); err != nil {
 							config.G.Log.System.LogError("Cassandra write error: %s", err.Error())
-							logging.Statsd.Client.Inc("storemgr.db.err.write", 1, 1.0)
+							logging.Statsd.Client.Inc("metricmgr.db.err.write", 1, 1.0)
 						}
 					}
 
@@ -358,12 +358,12 @@ func (sm *StoreManager) flush(terminating bool) {
 				if bw.Size() > 0 {
 					if err := bw.Write(); err != nil {
 						config.G.Log.System.LogError("Cassandra write error: %s", err.Error())
-						logging.Statsd.Client.Inc("storemgr.db.err.write", 1, 1.0)
+						logging.Statsd.Client.Inc("metricmgr.db.err.write", 1, 1.0)
 					}
 				}
 
 				// Set a new window closing time for the just-cleared window.
-				runList.nextWriteTime[i] = nextTimeBoundary(baseTime, sm.rollup[expr].Windows[i].Window)
+				runList.nextWriteTime[i] = nextTimeBoundary(baseTime, mm.rollup[expr].Windows[i].Window)
 			}
 			// ASSERT: runList.nextWriteTime[i] time is in the future (later than baseTime).
 
@@ -386,7 +386,7 @@ func (sm *StoreManager) flush(terminating bool) {
 
 		// Perform a non-blocking write to the timeout channel.
 		select {
-		case sm.setTimeout <- delay:
+		case mm.setTimeout <- delay:
 			// Notification sent
 		default:
 			// Do not block if channel is at capacity
@@ -395,23 +395,23 @@ func (sm *StoreManager) flush(terminating bool) {
 }
 
 // query returns the data matched by the supplied query.
-func (sm *StoreManager) query(q config.MetricQuery) {
+func (mm *MetricManager) query(q config.MetricQuery) {
 	switch strings.ToLower(q.Method) {
 	case "delete":
 		mqdt := time.Now()
 		// TODO
-		logging.Statsd.Client.TimingDuration("storemgr.query.delete", time.Since(mqdt), 1.0)
+		logging.Statsd.Client.TimingDuration("metricmgr.query.delete", time.Since(mqdt), 1.0)
 	default:
 		mqgt := time.Now()
-		sm.queryGET(q)
-		logging.Statsd.Client.TimingDuration("storemgr.query.get", time.Since(mqgt), 1.0)
+		mm.queryGET(q)
+		logging.Statsd.Client.TimingDuration("metricmgr.query.get", time.Since(mqgt), 1.0)
 	}
 }
 
 // query returns the data matched by the supplied query.
-func (sm *StoreManager) queryGET(q config.MetricQuery) {
+func (mm *MetricManager) queryGET(q config.MetricQuery) {
 
-	config.G.Log.System.LogDebug("StoreManager::query %v", q.Query)
+	config.G.Log.System.LogDebug("MetricManager::query %v", q.Query)
 
 	// Query particulars are mandatory.
 	if len(q.Query) == 0 || q.Query[0] == "" {
@@ -433,7 +433,7 @@ func (sm *StoreManager) queryGET(q config.MetricQuery) {
 
 	// Determine lookup table and data point step
 	for _, path := range q.Query {
-		expr := sm.getExpression(path)
+		expr := mm.getExpression(path)
 		for _, window := range config.G.Rollup[expr].Windows {
 			config.G.Log.System.LogDebug("evaluating %v", window)
 			config.G.Log.System.LogDebug("timeDelta: %d, window.Retention: %d", timeDelta.Seconds(), window.Retention.Seconds())
@@ -451,7 +451,7 @@ func (sm *StoreManager) queryGET(q config.MetricQuery) {
 		config.G.Log.System.LogDebug("Query: %s", query)
 
 		// Populate statList with returned stats.
-		iter := sm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
+		iter := mm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
 		for iter.Scan(&singleStat) {
 			config.G.Log.System.LogDebug("singleStat: %d", singleStat)
 			statList = append(statList, singleStat)
@@ -461,7 +461,7 @@ func (sm *StoreManager) queryGET(q config.MetricQuery) {
 
 		if err := iter.Close(); err != nil {
 			config.G.Log.System.LogError("Error closing stat iteration: %s", err.Error())
-			logging.Statsd.Client.Inc("storemgr.db.err.read", 1, 1.0)
+			logging.Statsd.Client.Inc("metricmgr.db.err.read", 1, 1.0)
 		}
 
 		// Append to series portion of response.

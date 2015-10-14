@@ -102,15 +102,15 @@ func main() {
 	config.G.Channels.IndexRequest = make(chan config.IndexQuery, config.G.Channels.IndexRequestChanLen)
 
 	// Create and initialize the internal modules.
-	storeManager := new(datastore.StoreManager)
+	metricManager := new(datastore.MetricManager)
 	indexManager := new(datastore.IndexManager)
 	carbonListener := new(listener.CarbonPlaintextListener)
-	storeManager.Init()
+	metricManager.Init()
 	indexManager.Init()
 	carbonListener.Init()
 
-	// StoreManager goroutines persist for the life of the app; start them now.
-	storeManager.Start(&onExitWG)
+	// MetricManager goroutines persist for the life of the app; start them now.
+	metricManager.Start(&onExitWG)
 
 	// Repeat until terminated by SIGINT/SIGTERM.
 	configIsStale := false
