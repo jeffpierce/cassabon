@@ -396,9 +396,13 @@ func (sm *StoreManager) flush(terminating bool) {
 func (sm *StoreManager) query(q config.MetricQuery) {
 	switch strings.ToLower(q.Method) {
 	case "delete":
+		mqdt := time.Now()
 		// TODO
+		logging.Statsd.Client.TimingDuration("storemgr.query.delete", time.Since(mqdt), 1.0)
 	default:
+		mqgt := time.Now()
 		sm.queryGET(q)
+		logging.Statsd.Client.TimingDuration("storemgr.query.get", time.Since(mqgt), 1.0)
 	}
 }
 
