@@ -119,7 +119,7 @@ func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 		config.G.Log.System.LogWarn(
 			"Index query discarded, IndexRequest channel is full (max %d entries)",
 			config.G.Channels.IndexRequestChanLen)
-		logging.Statsd.Client.Inc("api.dropped.path.get", 1, 1.0)
+		logging.Statsd.Client.Inc("api.err.path.get", 1, 1.0)
 	}
 
 	// Send the response to the client.
