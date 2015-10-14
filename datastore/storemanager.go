@@ -347,6 +347,7 @@ func (sm *StoreManager) flush(terminating bool) {
 						// This will cause a write if we have reached our maximum batch size.
 						if err := bw.Append(path, statTime, rollup.value[i]); err != nil {
 							config.G.Log.System.LogError("Cassandra write error: %s", err.Error())
+							logging.Statsd.Client.Inc("storemgr.db.err.write", 1, 1.0)
 						}
 					}
 
@@ -357,6 +358,7 @@ func (sm *StoreManager) flush(terminating bool) {
 				if bw.Size() > 0 {
 					if err := bw.Write(); err != nil {
 						config.G.Log.System.LogError("Cassandra write error: %s", err.Error())
+						logging.Statsd.Client.Inc("storemgr.db.err.write", 1, 1.0)
 					}
 				}
 
@@ -459,6 +461,7 @@ func (sm *StoreManager) queryGET(q config.MetricQuery) {
 
 		if err := iter.Close(); err != nil {
 			config.G.Log.System.LogError("Error closing stat iteration: %s", err.Error())
+			logging.Statsd.Client.Inc("storemgr.db.err.read", 1, 1.0)
 		}
 
 		// Append to series portion of response.

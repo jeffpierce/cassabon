@@ -99,6 +99,7 @@ func (cpl *CarbonPlaintextListener) carbonTCP(hostPort string) {
 					config.G.Log.System.LogDebug("CarbonTCP Accept() timed out")
 				} else {
 					config.G.Log.System.LogWarn("CarbonTCP Accept() error: %s", err.Error())
+					logging.Statsd.Client.Inc("carbon.err.tcp", 1, 1.0)
 				}
 			}
 		}
@@ -183,6 +184,7 @@ func (cpl *CarbonPlaintextListener) carbonUDP(hostPort string) {
 					config.G.Log.System.LogDebug("CarbonUDP Read() timed out")
 				} else {
 					config.G.Log.System.LogWarn("CarbonUDP Read() error: %s", err.Error())
+					logging.Statsd.Client.Inc("carbon.err.udp", 1, 1.0)
 				}
 			}
 		}
@@ -259,6 +261,7 @@ func (cpl *CarbonPlaintextListener) processPeerCommand(cmd, line string) {
 		config.G.Log.System.LogInfo("Command: peerlist=%q", peers)
 		if err := config.ValidatePeerList(config.G.Carbon.Listen, peers); err != nil {
 			config.G.Log.System.LogWarn("peerlist error: %s", err.Error())
+			logging.Statsd.Client.Inc("carbon.err.peer.validate", 1, 1.0)
 		} else {
 			// Is this peer list different from the one in current use?
 			if !cpl.peerList.IsEqual(config.G.Carbon.Listen, peers) {
@@ -269,5 +272,6 @@ func (cpl *CarbonPlaintextListener) processPeerCommand(cmd, line string) {
 		}
 	default:
 		config.G.Log.System.LogWarn("Invalid peer command received: %q", line)
+		logging.Statsd.Client.Inc("carbon.err.peer.cmd", 1, 1.0)
 	}
 }

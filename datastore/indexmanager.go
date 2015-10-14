@@ -130,6 +130,7 @@ func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLea
 	if err != nil {
 		// How do we want to degrade gracefully when this fails?
 		config.G.Log.System.LogError("Redis error: %s", err.Error())
+		logging.Statsd.Client.Inc("indexmgr.db.err.write", 1, 1.0)
 	}
 }
 
@@ -221,6 +222,7 @@ func (im *IndexManager) noWild(q string, l int) config.APIQueryResponse {
 
 	if err != nil {
 		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
+		logging.Statsd.Client.Inc("indexmgr.err.db.read", 1, 1.0)
 		return config.APIQueryResponse{config.AQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
@@ -246,6 +248,7 @@ func (im *IndexManager) simpleWild(q string, l int) config.APIQueryResponse {
 
 	if err != nil {
 		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
+		logging.Statsd.Client.Inc("indexmgr.err.db.read", 1, 1.0)
 		return config.APIQueryResponse{config.AQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
@@ -278,6 +281,7 @@ func (im *IndexManager) complexWild(splitWild []string, l int) config.APIQueryRe
 
 	if err != nil {
 		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
+		logging.Statsd.Client.Inc("indexmgr.err.db.read", 1, 1.0)
 		return config.APIQueryResponse{config.AQS_ERROR, err.Error(), []byte{}}
 	}
 	if len(resp) == 0 {
@@ -292,6 +296,7 @@ func (im *IndexManager) complexWild(splitWild []string, l int) config.APIQueryRe
 	if err != nil {
 		errMsg := fmt.Sprintf("Could not compile %s into regex: %s", rawRegex, err.Error())
 		config.G.Log.System.LogWarn(errMsg)
+		logging.Statsd.Client.Inc("indexmgr.err.regex", 1, 1.0)
 		return config.APIQueryResponse{config.AQS_BADREQUEST, errMsg, []byte{}}
 	}
 

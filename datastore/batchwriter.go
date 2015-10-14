@@ -56,7 +56,7 @@ func (bw *batchWriter) Write() error {
 		bwt := time.Now()
 		bw.stmtCount = 0
 		err := bw.dbClient.ExecuteBatch(bw.batch)
-		logging.Statsd.Client.TimingDuration("db.write", time.Since(bwt), 1.0)
+		logging.Statsd.Client.TimingDuration("storemgr.db.write", time.Since(bwt), 1.0)
 		return err
 	} else {
 		return nil
