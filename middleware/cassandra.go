@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/gocql/gocql"
 )
@@ -18,6 +19,7 @@ func CassandraSession(chosts []string, cport string, ckeyspace string) (*gocql.S
 	clusterCfg.Port = int(port)
 	clusterCfg.DiscoverHosts = true
 	clusterCfg.Keyspace = ckeyspace
+	clusterCfg.Timeout = time.Duration(time.Second)
 
 	// Create session.
 	return clusterCfg.CreateSession()
