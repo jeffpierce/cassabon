@@ -15,6 +15,7 @@ import (
 	"github.com/zenazn/goji/web"
 
 	"github.com/jeffpierce/cassabon/config"
+	"github.com/jeffpierce/cassabon/logging"
 )
 
 type CassabonAPI struct {
@@ -63,6 +64,7 @@ func (api *CassabonAPI) notFoundHandler(w http.ResponseWriter, r *http.Request) 
 
 // healthHandler responds with either ALIVE or DEAD, for use by the load balancer.
 func (api *CassabonAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
+	hht := time.Now()
 
 	// We are alive, unless the healthcheck file says we are dead.
 	var alive bool = true
@@ -78,10 +80,13 @@ func (api *CassabonAPI) healthHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		fmt.Fprint(w, "DEAD")
 	}
+	logging.Statsd.Client.TimingDuration("api.health", time.Since(hht), 1.0)
 }
 
 // rootHandler provides information about the application, served from "/".
 func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
+	rt := time.Now()
+
 	resp := struct {
 		Message string `json:"message"`
 		Github  string `json:"github"`
@@ -92,10 +97,12 @@ func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
 	resp.Version = config.Version
 	jsonText, _ := json.Marshal(resp)
 	w.Write(jsonText)
+	logging.Statsd.Client.TimingDuration("api.root", time.Since(rt), 1.0)
 }
 
 // getPathHandler processes requests like "GET /paths?query=foo".
 func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
+	gpt := time.Now()
 
 	// Create the channel on which the response will be received.
 	ch := make(chan config.APIQueryResponse)
@@ -116,10 +123,12 @@ func (api *CassabonAPI) getPathHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Send the response to the client.
 	api.sendResponse(w, ch, config.G.API.Timeouts.GetIndex)
+	logging.Statsd.Client.TimingDuration("api.path.get", time.Since(gpt), 1.0)
 }
 
 // deletePathHandler removes paths from the index store.
 func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *http.Request) {
+	dpt := time.Now()
 
 	// Create the channel on which the response will be received.
 	ch := make(chan config.APIQueryResponse)
@@ -139,10 +148,12 @@ func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *htt
 
 	// Send the response to the client.
 	api.sendResponse(w, ch, config.G.API.Timeouts.DeleteIndex)
+	logging.Statsd.Client.TimingDuration("api.path.delete", time.Since(dpt), 1.0)
 }
 
 // getMetricHandler processes requests like "GET /metrics?query=foo".
 func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request) {
+	gmt := time.Now()
 
 	// Create the channel on which the response will be received.
 	ch := make(chan config.APIQueryResponse)
@@ -165,10 +176,12 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 
 	// Send the response to the client.
 	api.sendResponse(w, ch, config.G.API.Timeouts.GetMetric)
+	logging.Statsd.Client.TimingDuration("api.metrics.get", time.Since(gmt), 1.0)
 }
 
 // deleteMetricHandler removes data from the metrics store.
 func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *http.Request) {
+	dmt := time.Now()
 
 	// Create the channel on which the response will be received.
 	ch := make(chan config.APIQueryResponse)
@@ -188,6 +201,7 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 
 	// Send the response to the client.
 	api.sendResponse(w, ch, config.G.API.Timeouts.DeleteMetric)
+	logging.Statsd.Client.TimingDuration("api.metrics.delete", time.Since(dmt), 1.0)
 }
 
 func (api *CassabonAPI) sendResponse(w http.ResponseWriter, ch chan config.APIQueryResponse, timeout time.Duration) {
