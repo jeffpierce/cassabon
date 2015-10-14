@@ -34,6 +34,7 @@ cassandra:
     keyspace: "cassabon_dev"
     strategy: "SimpleStrategy"
     createopts: "'replication_factor':1"
+    batchsize: 2
 redis:
     addr:
         - "127.0.0.1:6379"

@@ -311,11 +311,16 @@ func (sm *StoreManager) flush(terminating bool) {
 	// Use a reasonable default value for setting the next timer delay.
 	nextFlush := baseTime.Add(time.Minute)
 
-	// Walk the set of expressions, looking for closed rollup windows.
-	for expr, rl := range sm.byExpr {
+	// Set up the database batch writer.
+	bw := batchWriter{}
+	bw.Init(sm.dbClient, config.G.Cassandra.Keyspace, config.G.Cassandra.BatchSize)
 
-		// Inspect each rollup window defined for this expression.
-		for i, windowEnd := range rl.nextWriteTime {
+	// Walk the set of expressions.
+	for expr, runList := range sm.byExpr {
+
+		// For each expression, inspect each rollup window.
+		// Note: Each window is written to a different table.
+		for i, windowEnd := range runList.nextWriteTime {
 
 			// If the window has closed, or if terminating, process and clear the data.
 			if windowEnd.Before(baseTime) || terminating {
@@ -328,27 +333,42 @@ func (sm *StoreManager) flush(terminating bool) {
 				}
 
 				// Iterate over all the paths that match the current expression.
-				for path, rollup := range rl.path {
+				bw.Prepare(sm.rollup[expr].Windows[i].Table)
+				for path, rollup := range runList.path {
 
 					if rollup.count[i] > 0 {
 						// Data has accumulated while this window was open; write it.
-						sm.write(expr, sm.rollup[expr].Windows[i], path, statTime, rollup.value[i])
+						config.G.Log.Carbon.LogInfo(
+							"match=%q tbl=%s ts=%v path=%s val=%.4f win=%v ret=%v ",
+							expr, sm.rollup[expr].Windows[i].Table,
+							statTime.Format("15:04:05.000"), path, rollup.value[i],
+							sm.rollup[expr].Windows[i].Window, sm.rollup[expr].Windows[i].Retention)
+
+						// This will cause a write if we have reached our maximum batch size.
+						if err := bw.Append(path, statTime, rollup.value[i]); err != nil {
+							config.G.Log.System.LogError("Cassandra write error: %s", err.Error())
+						}
 					}
 
 					// Ensure the bucket is empty for the next open window.
 					rollup.count[i] = 0
 					rollup.value[i] = 0
 				}
+				if bw.Size() > 0 {
+					if err := bw.Write(); err != nil {
+						config.G.Log.System.LogError("Cassandra write error: %s", err.Error())
+					}
+				}
 
 				// Set a new window closing time for the just-cleared window.
-				rl.nextWriteTime[i] = nextTimeBoundary(baseTime, sm.rollup[expr].Windows[i].Window)
+				runList.nextWriteTime[i] = nextTimeBoundary(baseTime, sm.rollup[expr].Windows[i].Window)
 			}
-			// ASSERT: rl.nextWriteTime[i] time is in the future (later than baseTime).
+			// ASSERT: runList.nextWriteTime[i] time is in the future (later than baseTime).
 
 			// Adjust the timer delay downwards if this window closing time is
 			// earlier than all others seen so far.
-			if nextFlush.After(rl.nextWriteTime[i]) {
-				nextFlush = rl.nextWriteTime[i]
+			if nextFlush.After(runList.nextWriteTime[i]) {
+				nextFlush = runList.nextWriteTime[i]
 			}
 		}
 	}
@@ -369,22 +389,6 @@ func (sm *StoreManager) flush(terminating bool) {
 		default:
 			// Do not block if channel is at capacity
 		}
-	}
-}
-
-// flush persists the accumulated metrics to the database.
-func (sm *StoreManager) write(expr string, w config.RollupWindow, path string, ts time.Time, value float64) {
-
-	config.G.Log.Carbon.LogInfo("match=%q tbl=%s ts=%v path=%s val=%.4f win=%v ret=%v ",
-		expr, w.Table, ts.Format("15:04:05.000"), path, value, w.Window, w.Retention)
-
-	query := fmt.Sprintf(
-		`INSERT INTO %s.%s (path, time, stat) VALUES (?, ?, ?)`,
-		config.G.Cassandra.Keyspace, w.Table)
-
-	if err := sm.dbClient.Query(query, path, ts, value).Exec(); err != nil {
-		// Could not write to Cassandra cluster...we should scream loudly about this.  Possibly a failure case?.
-		config.G.Log.System.LogError("Cassandra write error: %s", err.Error())
 	}
 }
 

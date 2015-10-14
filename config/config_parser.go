@@ -63,6 +63,7 @@ type CassandraSettings struct {
 	Keyspace   string   // Name of the Cassandra keyspace
 	Strategy   string   // Replication class of the keyspace
 	CreateOpts string   // CQL text for the strategy options
+	BatchSize  int      // The maximum number of insert statements to use in a batch
 }
 
 // Redis struct for redis connection information
