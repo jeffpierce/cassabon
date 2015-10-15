@@ -60,7 +60,7 @@ func (bw *batchWriter) Write() error {
 		if err != nil {
 			// Retry with exponential backoff.
 			config.G.Log.System.LogWarn("Retrying MetricManager write...")
-			go bw.retryWrite()
+			go bw.retryWrite(bw.batch)
 			logging.Statsd.Client.Inc("metricmgr.db.retry", 1, 1.0)
 		}
 		logging.Statsd.Client.TimingDuration("metricmgr.db.write", time.Since(bwt), 1.0)
@@ -68,12 +68,12 @@ func (bw *batchWriter) Write() error {
 	return nil
 }
 
-func (bw *batchWriter) retryWrite() error {
+func (bw *batchWriter) retryWrite(batch *gocql.Batch) error {
 	var i time.Duration
 	i = 0
 	var err error
 	for i < 5 {
-		err := bw.dbClient.ExecuteBatch(bw.batch)
+		err = bw.dbClient.ExecuteBatch(batch)
 		if err == nil {
 			return err
 		}
