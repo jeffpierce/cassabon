@@ -455,11 +455,28 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		// Populate statList with returned stats.
 		var statList []float64 = make([]float64, 0)
 		var stat float64
-		var ts time.Time
+		var ts, nextTS time.Time
+		var notFirstStat bool = false
 		iter := mm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
 		for iter.Scan(&stat, &ts) {
+
+			// Fill in any gaps in the series.
+			if notFirstStat {
+				nextTS = nextTS.Add(time.Duration(step) * time.Second)
+				for nextTS.Before(ts) {
+					config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", 0.0, nextTS, ts)
+					statList = append(statList, float64(0))
+					nextTS = nextTS.Add(time.Duration(step) * time.Second)
+				}
+			} else {
+				// Round down the first timestamp to make certain we start on a step boundary.
+				nextTS = ts.Truncate(time.Duration(step) * time.Second)
+			}
+
+			// Finally, append the current stat.
 			config.G.Log.System.LogDebug("row: %14.8f %v", stat, ts)
 			statList = append(statList, stat)
+			notFirstStat = true
 		}
 		if err := iter.Close(); err != nil {
 			config.G.Log.System.LogError("Error closing stat iteration: %s", err.Error())
