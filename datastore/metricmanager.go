@@ -332,8 +332,11 @@ func (mm *MetricManager) flush(terminating bool) {
 					statTime = windowEnd
 				}
 
-				// Iterate over all the paths that match the current expression.
+				// Every row in the batch has the same timestamp, is written to the same
+				// table, has the same retention period, and matches the same expression.
 				bw.Prepare(mm.rollup[expr].Windows[i].Table)
+
+				// Iterate over all the paths that match the current expression.
 				for path, rollup := range runList.path {
 
 					if rollup.count[i] > 0 {
