@@ -30,10 +30,10 @@ type runlist struct {
 
 // MetricResponse defines the response structure that will be converted into JSON before being returned.
 type MetricResponse struct {
-	From   int64                `json:"from"`
-	To     int64                `json:"to"`
-	Step   int                  `json:"step"`
-	Series map[string][]float64 `json:"series"`
+	From   int64                    `json:"from"`
+	To     int64                    `json:"to"`
+	Step   int                      `json:"step"`
+	Series map[string][]interface{} `json:"series"`
 }
 
 type MetricManager struct {
@@ -424,7 +424,7 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 
 	// Variables to be returned in the response payload.
 	var step int
-	series := map[string][]float64{}
+	series := map[string][]interface{}{}
 
 	// Get difference between now and q.From to determine which rollup table to query
 	timeDelta := time.Since(time.Unix(q.From, 0))
@@ -453,7 +453,7 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		config.G.Log.System.LogDebug("Querying for %q with: %q", path, query)
 
 		// Populate statList with returned stats.
-		var statList []float64 = make([]float64, 0)
+		var statList []interface{} = make([]interface{}, 0)
 		var stat float64
 		var ts, nextTS time.Time
 		var notFirstStat bool = false
@@ -465,7 +465,7 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 				nextTS = nextTS.Add(time.Duration(step) * time.Second)
 				for nextTS.Before(ts) {
 					config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", 0.0, nextTS, ts)
-					statList = append(statList, float64(0))
+					statList = append(statList, nil)
 					nextTS = nextTS.Add(time.Duration(step) * time.Second)
 				}
 			} else {
