@@ -215,9 +215,9 @@ func (api *CassabonAPI) sendResponse(w http.ResponseWriter, ch chan config.APIQu
 	select {
 	case resp = <-ch:
 		// Nothing, we have our response.
-	case <-time.After(time.Second * timeout):
+	case <-time.After(timeout):
 		// The query died or wedged; simulate a timeout response.
-		resp = config.APIQueryResponse{config.AQS_ERROR, "query timed out", []byte{}}
+		resp = config.APIQueryResponse{config.AQS_ERROR, fmt.Sprintf("query timed out after %v", timeout), []byte{}}
 	}
 	close(ch)
 
