@@ -414,7 +414,7 @@ func (mm *MetricManager) query(q config.MetricQuery) {
 // query returns the data matched by the supplied query.
 func (mm *MetricManager) queryGET(q config.MetricQuery) {
 
-	config.G.Log.System.LogDebug("MetricManager::query %v", q.Query)
+	config.G.Log.System.LogDebug("MetricManager::query %v", q)
 
 	// Query particulars are mandatory.
 	if len(q.Query) == 0 || q.Query[0] == "" {
@@ -422,68 +422,59 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		return
 	}
 
-	var resp config.APIQueryResponse
+	// Variables to be returned in the response payload.
 	var step int
-	var table string
-	var singleStat float64
-	var statList []float64
-
-	// Initialize series map
 	series := map[string][]float64{}
 
 	// Get difference between now and q.From to determine which rollup table to query
 	timeDelta := time.Since(time.Unix(q.From, 0))
 
-	// Determine lookup table and data point step
+	// Repeat for each path listed in the request.
 	for _, path := range q.Query {
+
+		// Determine lookup table name and data point step from config of rollup.
+		var table string
 		expr := mm.getExpression(path)
-		for _, window := range config.G.Rollup[expr].Windows {
-			config.G.Log.System.LogDebug("evaluating %v", window)
-			config.G.Log.System.LogDebug("timeDelta: %d, window.Retention: %d", timeDelta.Seconds(), window.Retention.Seconds())
+		config.G.Log.System.LogDebug("Determining step/table for path %q, expr %q", path, expr)
+		for _, window := range mm.rollup[expr].Windows {
+			config.G.Log.System.LogDebug("eval timeDelta: %v, ret: %v win: %v table: %s",
+				timeDelta, window.Retention, window.Window, window.Table)
 			if timeDelta < window.Retention {
 				table = window.Table
 				step = int(window.Window.Seconds())
+				config.G.Log.System.LogDebug("Using step=%d seconds, table=%s", step, table)
 				break
 			}
 		}
 
 		// Build query for this stat path
-		query := fmt.Sprintf(`SELECT stat FROM %s.%s WHERE path = ? AND time >= ? AND time <= ?`,
+		query := fmt.Sprintf(`SELECT stat,time FROM %s.%s WHERE path=? AND time>=? AND time<=?`,
 			config.G.Cassandra.Keyspace, table)
-
-		config.G.Log.System.LogDebug("Query: %s", query)
+		config.G.Log.System.LogDebug("Querying for %q with: %q", path, query)
 
 		// Populate statList with returned stats.
-		statList = make([]float64, 0)
+		var statList []float64 = make([]float64, 0)
+		var stat float64
+		var ts time.Time
 		iter := mm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
-		for iter.Scan(&singleStat) {
-			config.G.Log.System.LogDebug("singleStat: %d", singleStat)
-			statList = append(statList, singleStat)
+		for iter.Scan(&stat, &ts) {
+			config.G.Log.System.LogDebug("row: %14.8f %v", stat, ts)
+			statList = append(statList, stat)
 		}
-
-		config.G.Log.System.LogDebug("statList: %v", statList)
-
 		if err := iter.Close(); err != nil {
 			config.G.Log.System.LogError("Error closing stat iteration: %s", err.Error())
 			logging.Statsd.Client.Inc("metricmgr.db.err.read", 1, 1.0)
 		}
 
 		// Append to series portion of response.
+		config.G.Log.System.LogDebug("Result: %s=%v", path, statList)
 		series[path] = statList
 	}
 
-	response := MetricResponse{
-		q.From,
-		q.To,
-		step,
-		series,
-	}
-
-	jsonResp, _ := json.Marshal(response)
-
-	resp = config.APIQueryResponse{config.AQS_OK, "", jsonResp}
-
-	// For testing: time.Sleep(time.Second * 2)
+	// Build the response payload and wrap it in the channel reply struct.
+	payload := MetricResponse{q.From, q.To, step, series}
+	jsonResp, _ := json.Marshal(payload)
+	resp := config.APIQueryResponse{config.AQS_OK, "", jsonResp}
 
 	// If the API gave up on us because we took too long, writing to the channel
 	// will cause first a data race, and then a panic (write on closed channel).
