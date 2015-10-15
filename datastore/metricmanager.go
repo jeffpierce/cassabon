@@ -454,6 +454,7 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		config.G.Log.System.LogDebug("Query: %s", query)
 
 		// Populate statList with returned stats.
+		statList = make([]float64, 0)
 		iter := mm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
 		for iter.Scan(&singleStat) {
 			config.G.Log.System.LogDebug("singleStat: %d", singleStat)
