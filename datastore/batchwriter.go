@@ -78,7 +78,7 @@ func (bw *batchWriter) retryWrite(batch *gocql.Batch) error {
 			return err
 		}
 		i++
-		time.Sleep(i * 1000 * time.Second)
+		time.Sleep(i * time.Second)
 	}
 	// Failed 5x times, give up and log the error.
 	logging.Statsd.Client.Inc("metricmgr.db.err.write", 1, 1.0)
