@@ -125,6 +125,11 @@ func (l *FileLogger) SetLogLevel(logLevel Severity) {
 	l.LogInfo("Log level set to %s", SeverityToText(logLevel))
 }
 
+// GetLogLevel returns the current logging level threshold.
+func (l *FileLogger) GetLogLevel() Severity {
+	return l.logLevel
+}
+
 // Open allocates resources for the logger.
 func (l *FileLogger) Open(logFilename string, logLevel Severity) {
 

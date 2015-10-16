@@ -342,11 +342,13 @@ func (mm *MetricManager) flush(terminating bool) {
 
 					if rollup.count[i] > 0 {
 						// Data has accumulated while this window was open; write it.
-						config.G.Log.Carbon.LogInfo(
-							"match=%q tbl=%s ts=%v path=%s val=%.4f win=%v ret=%v ",
-							expr, mm.rollup[expr].Windows[i].Table,
-							statTime.Format("15:04:05.000"), path, rollup.value[i],
-							mm.rollup[expr].Windows[i].Window, mm.rollup[expr].Windows[i].Retention)
+						if config.G.Log.System.GetLogLevel() < logging.Info {
+							config.G.Log.Carbon.LogInfo(
+								"match=%q tbl=%s ts=%v path=%s val=%.4f win=%v ret=%v ",
+								expr, mm.rollup[expr].Windows[i].Table,
+								statTime.Format("15:04:05.000"), path, rollup.value[i],
+								mm.rollup[expr].Windows[i].Window, mm.rollup[expr].Windows[i].Retention)
+						}
 
 						// This will cause a write if we have reached our maximum batch size.
 						if err := bw.Append(path, statTime, rollup.value[i]); err != nil {
