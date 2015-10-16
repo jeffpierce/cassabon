@@ -75,7 +75,7 @@ func (mm *MetricManager) Init() {
 	// Initialize private objects.
 	mm.setTimeout = make(chan time.Duration, 0)
 	mm.timeout = make(chan struct{}, 1)
-	mm.insert = make(chan *gocql.Batch)
+	mm.insert = make(chan *gocql.Batch, 5000)
 }
 
 func (mm *MetricManager) Start(wg *sync.WaitGroup) {
@@ -172,6 +172,16 @@ func (mm *MetricManager) populateSchema() {
 }
 
 func (mm *MetricManager) writer() {
+
+	// We associate a number of retries with each Cassandra batch we receive.
+	type queueEntry struct {
+		tries int
+		batch *gocql.Batch
+	}
+
+	// The queue for the batches we receive on the insert channel.
+	var queue []queueEntry
+
 	for {
 		select {
 		case <-mm.writerOnExit:
@@ -179,13 +189,21 @@ func (mm *MetricManager) writer() {
 			mm.writerWG.Done()
 			return
 		case batch := <-mm.insert:
-			//TODO
-			err := mm.dbClient.ExecuteBatch(batch)
-			if err != nil {
-				// Retry with exponential backoff.
-				config.G.Log.System.LogWarn("Retrying MetricManager write...")
-				//go bw.retryWrite(bw.batch)
-				logging.Statsd.Client.Inc("metricmgr.db.retry", 1, 1.0)
+			// First property is the number of retries.
+			queue = append(queue, queueEntry{5, batch})
+		case <-time.After(time.Millisecond * 10):
+			for len(queue) > 0 {
+				qe := queue[0]
+				queue = queue[1:]
+				if err := mm.dbClient.ExecuteBatch(qe.batch); err != nil {
+					config.G.Log.System.LogWarn("MetricManager::writer retrying write: %s", err.Error())
+					logging.Statsd.Client.Inc("metricmgr.db.retry", 1, 1.0)
+					qe.tries--
+					if qe.tries > 0 {
+						queue = append(queue, qe) // Stick it back in the queue
+					}
+					break // On errors, wait for the next timeout before retrying
+				}
 			}
 		}
 	}
