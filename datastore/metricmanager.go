@@ -495,8 +495,14 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 
 	// Build the response payload and wrap it in the channel reply struct.
 	payload := MetricResponse{q.From, q.To, step, series}
-	jsonResp, _ := json.Marshal(payload)
-	resp := config.APIQueryResponse{config.AQS_OK, "", jsonResp}
+	var resp config.APIQueryResponse
+	if jsonResp, err := json.Marshal(payload); err == nil {
+		resp = config.APIQueryResponse{config.AQS_OK, "", jsonResp}
+	} else {
+		resp = config.APIQueryResponse{config.AQS_ERROR, "JSON encoding error", []byte{}}
+		config.G.Log.System.LogError("JSON encoding error: %s", err.Error())
+		logging.Statsd.Client.Inc("metricmgr.db.err.read", 1, 1.0)
+	}
 
 	// If the API gave up on us because we took too long, writing to the channel
 	// will cause first a data race, and then a panic (write on closed channel).
