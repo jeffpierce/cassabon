@@ -68,14 +68,15 @@ func (bw *batchWriter) Write() error {
 	return nil
 }
 
-func (bw *batchWriter) retryWrite(batch *gocql.Batch) error {
+// retryWrite
+func (bw *batchWriter) retryWrite(batch *gocql.Batch) {
 	var i time.Duration
 	i = 0
 	var err error
 	for i < 5 {
 		err = bw.dbClient.ExecuteBatch(batch)
 		if err == nil {
-			return err
+			return
 		}
 		i++
 		time.Sleep(i * time.Second)
@@ -83,5 +84,4 @@ func (bw *batchWriter) retryWrite(batch *gocql.Batch) error {
 	// Failed 5x times, give up and log the error.
 	logging.Statsd.Client.Inc("metricmgr.db.err.write", 1, 1.0)
 	config.G.Log.System.LogError("Could not write batch to database: %v", err.Error())
-	return err
 }
