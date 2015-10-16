@@ -16,5 +16,6 @@ case $1 in
 esac
 
 echo "Start of query range: `date -j -r $FROM`"
-curl -X GET "localhost:8080/metrics?path=foo.bar.baz.count&path=foo.bar.baz.min&path=foo.bar.baz.max&path=foo.bar.baz.sum&path=foo.bar.baz.average&from=$FROM&to=$TO"
+echo "curl -X GET" \""127.0.0.1:8080/metrics?path=foo.bar.baz.count&path=foo.bar.baz.min&path=foo.bar.baz.max&path=foo.bar.baz.sum&path=foo.bar.baz.average&from=$FROM&to=$TO"\"
+curl -X GET "127.0.0.1:8080/metrics?path=foo.bar.baz.count&path=foo.bar.baz.min&path=foo.bar.baz.max&path=foo.bar.baz.sum&path=foo.bar.baz.average&from=$FROM&to=$TO"
 echo ""
