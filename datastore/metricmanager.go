@@ -457,21 +457,16 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		var statList []interface{} = make([]interface{}, 0)
 		var stat float64
 		var ts, nextTS time.Time
-		var notFirstStat bool = false
+		nextTS = time.Unix(q.From, 0)
 		iter := mm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
 		for iter.Scan(&stat, &ts) {
 
 			// Fill in any gaps in the series.
-			if notFirstStat {
+			nextTS = nextTS.Add(time.Duration(step) * time.Second)
+			for nextTS.Before(ts) {
+				config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", 0.0, nextTS, ts)
+				statList = append(statList, nil)
 				nextTS = nextTS.Add(time.Duration(step) * time.Second)
-				for nextTS.Before(ts) {
-					config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", 0.0, nextTS, ts)
-					statList = append(statList, nil)
-					nextTS = nextTS.Add(time.Duration(step) * time.Second)
-				}
-			} else {
-				// Round down the first timestamp to make certain we start on a step boundary.
-				nextTS = ts.Truncate(time.Duration(step) * time.Second)
 			}
 
 			// Finally, append the current stat.
@@ -481,7 +476,6 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 			} else {
 				statList = append(statList, stat)
 			}
-			notFirstStat = true
 		}
 		if err := iter.Close(); err != nil {
 			config.G.Log.System.LogError("Error closing stat iteration: %s", err.Error())
