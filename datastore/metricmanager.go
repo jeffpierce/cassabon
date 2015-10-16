@@ -3,6 +3,7 @@ package datastore
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -475,7 +476,11 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 
 			// Finally, append the current stat.
 			config.G.Log.System.LogDebug("row: %14.8f %v", stat, ts)
-			statList = append(statList, stat)
+			if math.IsNaN(stat) {
+				statList = append(statList, nil)
+			} else {
+				statList = append(statList, stat)
+			}
 			notFirstStat = true
 		}
 		if err := iter.Close(); err != nil {
