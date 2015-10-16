@@ -42,6 +42,10 @@ type MetricManager struct {
 	// Wait Group for managing orderly reloads and termination.
 	wg *sync.WaitGroup
 
+	// The writer must finish last of all, so it gets its own signalling channel and wait group.
+	writerWG     sync.WaitGroup
+	writerOnExit chan struct{}
+
 	// Rollup configuration.
 	// Note: Does not reload on SIGHUP.
 	rollupPriority []string                    // First matched expression wins
@@ -53,6 +57,9 @@ type MetricManager struct {
 
 	// Database connection.
 	dbClient *gocql.Session
+
+	// Channel for async processing of Cassandra batches.
+	insert chan *gocql.Batch
 
 	// Rollup data.
 	byPath map[string]*rollup  // Stats, by path, for rollup accumulation
@@ -68,12 +75,18 @@ func (mm *MetricManager) Init() {
 	// Initialize private objects.
 	mm.setTimeout = make(chan time.Duration, 0)
 	mm.timeout = make(chan struct{}, 1)
+	mm.insert = make(chan *gocql.Batch)
 }
 
 func (mm *MetricManager) Start(wg *sync.WaitGroup) {
 
 	// Start the persistent goroutines.
 	mm.wg = wg
+
+	mm.writerOnExit = make(chan struct{}, 1)
+	mm.writerWG.Add(1)
+	go mm.writer()
+
 	mm.wg.Add(2)
 	go mm.timer()
 	go mm.run()
@@ -158,6 +171,26 @@ func (mm *MetricManager) populateSchema() {
 	}
 }
 
+func (mm *MetricManager) writer() {
+	for {
+		select {
+		case <-mm.writerOnExit:
+			config.G.Log.System.LogDebug("MetricManager::writer received QUIT message")
+			mm.writerWG.Done()
+			return
+		case batch := <-mm.insert:
+			//TODO
+			err := mm.dbClient.ExecuteBatch(batch)
+			if err != nil {
+				// Retry with exponential backoff.
+				config.G.Log.System.LogWarn("Retrying MetricManager write...")
+				//go bw.retryWrite(bw.batch)
+				logging.Statsd.Client.Inc("metricmgr.db.retry", 1, 1.0)
+			}
+		}
+	}
+}
+
 func (mm *MetricManager) run() {
 
 	defer config.G.OnPanic()
@@ -195,6 +228,8 @@ func (mm *MetricManager) run() {
 		case <-config.G.OnExit:
 			config.G.Log.System.LogDebug("MetricManager::run received QUIT message")
 			mm.flush(true)
+			close(mm.writerOnExit)
+			mm.writerWG.Wait()
 			mm.wg.Done()
 			return
 		case metric := <-config.G.Channels.MetricStore:
@@ -314,7 +349,7 @@ func (mm *MetricManager) flush(terminating bool) {
 
 	// Set up the database batch writer.
 	bw := batchWriter{}
-	bw.Init(mm.dbClient, config.G.Cassandra.Keyspace, config.G.Cassandra.BatchSize)
+	bw.Init(mm.dbClient, config.G.Cassandra.Keyspace, config.G.Cassandra.BatchSize, mm.insert)
 
 	// Walk the set of expressions.
 	for expr, runList := range mm.byExpr {
@@ -350,11 +385,7 @@ func (mm *MetricManager) flush(terminating bool) {
 								mm.rollup[expr].Windows[i].Window, mm.rollup[expr].Windows[i].Retention)
 						}
 
-						// This will cause a write if we have reached our maximum batch size.
-						if err := bw.Append(path, statTime, rollup.value[i]); err != nil {
-							config.G.Log.System.LogError("Cassandra write error: %s", err.Error())
-							logging.Statsd.Client.Inc("metricmgr.db.err.write", 1, 1.0)
-						}
+						bw.Append(path, statTime, rollup.value[i])
 					}
 
 					// Ensure the bucket is empty for the next open window.
@@ -362,10 +393,7 @@ func (mm *MetricManager) flush(terminating bool) {
 					rollup.value[i] = 0
 				}
 				if bw.Size() > 0 {
-					if err := bw.Write(); err != nil {
-						config.G.Log.System.LogError("Cassandra write error: %s", err.Error())
-						logging.Statsd.Client.Inc("metricmgr.db.err.write", 1, 1.0)
-					}
+					bw.Write()
 				}
 
 				// Set a new window closing time for the just-cleared window.
