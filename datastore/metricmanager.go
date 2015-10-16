@@ -482,6 +482,15 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 			logging.Statsd.Client.Inc("metricmgr.db.err.read", 1, 1.0)
 		}
 
+		// Fill in gaps after the last data point.
+		to := time.Unix(q.To, 0)
+		nextTS = nextTS.Add(time.Duration(step) * time.Second)
+		for nextTS.Before(to) {
+			config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", 0.0, nextTS, to)
+			statList = append(statList, nil)
+			nextTS = nextTS.Add(time.Duration(step) * time.Second)
+		}
+
 		// Append to series portion of response.
 		config.G.Log.System.LogDebug("Result: %s=%v", path, statList)
 		series[path] = statList
