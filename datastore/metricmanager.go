@@ -204,7 +204,7 @@ func (mm *MetricManager) writer() {
 					}
 					break // On errors, wait for the next timeout before retrying
 				}
-				// Drain the queue after each write, so it can't fill up.
+				// Drain the channel after each write, so it can't fill up.
 				checkForMore := true
 				for checkForMore {
 					select {
