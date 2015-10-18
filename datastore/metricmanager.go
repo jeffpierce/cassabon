@@ -181,6 +181,7 @@ func (mm *MetricManager) writer() {
 
 	// The queue for the batches we receive on the insert channel.
 	var queue []queueEntry
+	const numberOfRetries = 5
 
 	for {
 		select {
@@ -189,9 +190,8 @@ func (mm *MetricManager) writer() {
 			mm.writerWG.Done()
 			return
 		case batch := <-mm.insert:
-			// First property is the number of retries.
-			queue = append(queue, queueEntry{5, batch})
-		case <-time.After(time.Millisecond * 10):
+			queue = append(queue, queueEntry{numberOfRetries, batch})
+		case <-time.After(time.Second):
 			for len(queue) > 0 {
 				qe := queue[0]
 				queue = queue[1:]
@@ -203,6 +203,16 @@ func (mm *MetricManager) writer() {
 						queue = append(queue, qe) // Stick it back in the queue
 					}
 					break // On errors, wait for the next timeout before retrying
+				}
+				// Drain the channel after each write, so it can't fill up.
+				checkForMore := true
+				for checkForMore {
+					select {
+					case batch := <-mm.insert:
+						queue = append(queue, queueEntry{numberOfRetries, batch})
+					default:
+						checkForMore = false
+					}
 				}
 			}
 		}
