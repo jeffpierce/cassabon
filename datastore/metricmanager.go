@@ -118,8 +118,7 @@ func (mm *MetricManager) resetRollupData() {
 func (mm *MetricManager) populateSchema() {
 
 	// Create the keyspace if it does not exist.
-	conn := mm.dbClient.Pool.Pick(mm.dbClient.Query(""))
-	if err := conn.UseKeyspace(config.G.Cassandra.Keyspace); err != nil {
+	if _, err := mm.dbClient.KeyspaceMetadata(config.G.Cassandra.Keyspace); err != nil {
 		// Note: "USE <keyspace>" isn't allowed, and conn.UseKeyspace() isn't sticky.
 		config.G.Log.System.LogInfo("Keyspace not found: %s", err.Error())
 		var options string
