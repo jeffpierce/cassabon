@@ -334,8 +334,7 @@ func (mm *MetricManager) accumulate(metric config.CarbonMetric) {
 	switch mm.rollup[currentRollup.expr].Method {
 	case config.AVERAGE:
 		for i, v := range currentRollup.value {
-			currentRollup.value[i] = (v*float64(currentRollup.count[i]) + metric.Value) /
-				float64(currentRollup.count[i]+1)
+			currentRollup.value[i] = v + metric.Value
 		}
 	case config.MAX:
 		for i, v := range currentRollup.value {
@@ -404,15 +403,24 @@ func (mm *MetricManager) flush(terminating bool) {
 
 					if rollup.count[i] > 0 {
 						// Data has accumulated while this window was open; write it.
+						var value float64
+						if mm.rollup[expr].Method == config.AVERAGE {
+							// Calculate averages by dividing by the count.
+							value = rollup.value[i] / float64(rollup.count[i])
+						} else {
+							// Other rollup methods use the value as-is.
+							value = rollup.value[i]
+						}
+
 						if config.G.Log.System.GetLogLevel() < logging.Info {
 							config.G.Log.Carbon.LogInfo(
 								"match=%q tbl=%s ts=%v path=%s val=%.4f win=%v ret=%v ",
 								expr, mm.rollup[expr].Windows[i].Table,
-								statTime.Format("15:04:05.000"), path, rollup.value[i],
+								statTime.Format("15:04:05.000"), path, value,
 								mm.rollup[expr].Windows[i].Window, mm.rollup[expr].Windows[i].Retention)
 						}
 
-						bw.Append(path, statTime, rollup.value[i])
+						bw.Append(path, statTime, value)
 					}
 
 					// Ensure the bucket is empty for the next open window.
