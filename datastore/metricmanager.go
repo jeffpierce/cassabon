@@ -522,26 +522,29 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		var statList []interface{} = make([]interface{}, 0)
 		var stat float64
 		var ts, nextTS time.Time
-		nextTS = time.Unix(q.From, 0)
+		nextTS = time.Unix(q.From, 0).Add(-time.Duration(step) * time.Second) // Go back into previous step
+		nextTS = nextTimeBoundary(nextTS, time.Duration(step)*time.Second)    // Advance to step boundary
 		iter := mm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
 		for iter.Scan(&stat, &ts) {
 
 			// Fill in any gaps in the series.
 			nextTS = nextTS.Add(time.Duration(step) * time.Second)
 			for nextTS.Before(ts) {
-				config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", 0.0, nextTS, ts)
+				config.G.Log.System.LogDebug("ins: %14s %v ( %v )", "nil",
+					nextTS.UTC().Format("15:04:05.000"), ts.Format("15:04:05.000"))
 				statList = append(statList, nil)
 				nextTS = nextTS.Add(time.Duration(step) * time.Second)
 			}
 
-			// Finally, append the current stat.
-			config.G.Log.System.LogDebug("row: %14.8f %v", stat, ts)
+			// Append the current stat.
+			config.G.Log.System.LogDebug("row: %14.8f %v", stat, ts.Format("15:04:05.000"))
 			if math.IsNaN(stat) {
 				statList = append(statList, nil)
 			} else {
 				statList = append(statList, stat)
 			}
 		}
+
 		if err := iter.Close(); err != nil {
 			config.G.Log.System.LogError("Error closing stat iteration: %s", err.Error())
 			logging.Statsd.Client.Inc("metricmgr.db.err.read", 1, 1.0)
@@ -551,7 +554,8 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		to := time.Unix(q.To, 0)
 		nextTS = nextTS.Add(time.Duration(step) * time.Second)
 		for nextTS.Before(to) {
-			config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", 0.0, nextTS, to)
+			config.G.Log.System.LogDebug("pad: %14s %v ( %v )", "nil",
+				nextTS.UTC().Format("15:04:05.000"), to.UTC().Format("15:04:05.000"))
 			statList = append(statList, nil)
 			nextTS = nextTS.Add(time.Duration(step) * time.Second)
 		}
