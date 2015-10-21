@@ -416,7 +416,7 @@ func (mm *MetricManager) flush(terminating bool) {
 							config.G.Log.Carbon.LogInfo(
 								"match=%q tbl=%s ts=%v path=%s val=%.4f win=%v ret=%v ",
 								expr, mm.rollup[expr].Windows[i].Table,
-								statTime.Format("15:04:05.000"), path, value,
+								statTime.UTC().Format("15:04:05.000"), path, value,
 								mm.rollup[expr].Windows[i].Window, mm.rollup[expr].Windows[i].Retention)
 						}
 
