@@ -21,7 +21,7 @@ func main() {
 	defer config.G.OnPanic()
 
 	// The name of the YAML configuration file.
-	var confFile string
+	var confFile, loglevel string
 
 	// The WaitGroups for managing orderly goroutine reloads and termination.
 	var onReload1WG sync.WaitGroup // Wait on this if you receive external inputs
@@ -29,7 +29,8 @@ func main() {
 	var onExitWG sync.WaitGroup    // Wait on this for final program termination
 
 	// Get options provided on the command line.
-	flag.StringVar(&confFile, "conf", "config/cassabon.yaml", "Location of YAML configuration file.")
+	flag.StringVar(&confFile, "conf", "config/cassabon.yaml", "Location of YAML configuration file")
+	flag.StringVar(&loglevel, "loglevel", "", "logging level, to override configuration until SIGHUP")
 	flag.Parse()
 
 	// Create the loggers.
@@ -45,6 +46,10 @@ func main() {
 	config.LoadStartupValues()
 
 	// Set up logging.
+	if len(loglevel) > 0 {
+		// This will revert to the configured value at the first SIGHUP.
+		config.G.Log.Loglevel = loglevel
+	}
 	sev, errLogLevel := logging.TextToSeverity(config.G.Log.Loglevel)
 	if config.G.Log.Logdir != "" {
 		logDir, _ := filepath.Abs(config.G.Log.Logdir)
