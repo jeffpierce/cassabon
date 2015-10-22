@@ -530,33 +530,70 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		// Populate statList with returned stats.
 		var statList []interface{} = make([]interface{}, 0)
 		var stat float64
+		var mergeCount uint64
+		var mergeValue float64
 		var ts, nextTS time.Time
-		nextTS = time.Unix(q.From, 0).Add(-time.Duration(step) * time.Second) // Go back into previous step
-		nextTS = nextTimeBoundary(nextTS, time.Duration(step)*time.Second)    // Advance to step boundary
+		nextTS = nextTimeBoundary(time.Unix(q.From, 0), time.Duration(step)*time.Second)
 		iter := mm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
 		for iter.Scan(&stat, &ts) {
 
 			// Fill in any gaps in the series.
-			nextTS = nextTS.Add(time.Duration(step) * time.Second)
 			for nextTS.Before(ts) {
-				config.G.Log.System.LogDebug("ins: %14s %v ( %v )", "nil",
-					nextTS.UTC().Format("15:04:05.000"), ts.Format("15:04:05.000"))
-				statList = append(statList, nil)
+				if ts.Sub(nextTS) >= time.Duration(step)*time.Second {
+					if mergeCount > 0 {
+						if mm.rollup[expr].Method == config.AVERAGE {
+							// Calculate averages by dividing by the count.
+							mergeValue = mergeValue / float64(mergeCount)
+						}
+						config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", mergeValue,
+							nextTS.UTC().Format("15:04:05.000"), ts.Format("15:04:05.000"))
+						statList = append(statList, mergeValue)
+						mergeValue = 0
+						mergeCount = 0
+					} else {
+						config.G.Log.System.LogDebug("ins: %14s %v ( %v )", "nil",
+							nextTS.UTC().Format("15:04:05.000"), ts.Format("15:04:05.000"))
+						statList = append(statList, nil)
+					}
+				}
 				nextTS = nextTS.Add(time.Duration(step) * time.Second)
 			}
 
 			// Append the current stat.
-			config.G.Log.System.LogDebug("row: %14.8f %v", stat, ts.Format("15:04:05.000"))
-			if math.IsNaN(stat) {
-				statList = append(statList, nil)
+			if ts.Equal(nextTS) {
+				config.G.Log.System.LogDebug("row: %14.8f %v ( %v )", stat,
+					ts.Format("15:04:05.000"), nextTS.UTC().Format("15:04:05.000"))
+				if math.IsNaN(stat) {
+					statList = append(statList, nil)
+				} else {
+					statList = append(statList, stat)
+				}
+				nextTS = ts.Add(time.Duration(step) * time.Second)
 			} else {
-				statList = append(statList, stat)
+				config.G.Log.System.LogDebug("---: %14.8f %v ( %v )", stat,
+					ts.Format("15:04:05.000"), nextTS.UTC().Format("15:04:05.000"))
+				mergeValue = mm.applyMethod(mm.rollup[expr].Method, mergeValue, stat, mergeCount)
+				mergeCount++
+				nextTS = nextTimeBoundary(ts, time.Duration(step)*time.Second)
 			}
 		}
 
 		if err := iter.Close(); err != nil {
 			config.G.Log.System.LogError("Error closing stat iteration: %s", err.Error())
 			logging.Statsd.Client.Inc("metricmgr.db.err.read", 1, 1.0)
+		}
+
+		// Write final data point, if there is one.
+		if mergeCount > 0 {
+			if mm.rollup[expr].Method == config.AVERAGE {
+				// Calculate averages by dividing by the count.
+				mergeValue = mergeValue / float64(mergeCount)
+			}
+			config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", mergeValue,
+				nextTS.UTC().Format("15:04:05.000"), ts.Format("15:04:05.000"))
+			statList = append(statList, mergeValue)
+			mergeValue = 0
+			mergeCount = 0
 		}
 
 		// Fill in gaps after the last data point.
