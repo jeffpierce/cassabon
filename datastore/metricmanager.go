@@ -182,38 +182,50 @@ func (mm *MetricManager) writer() {
 	var queue []queueEntry
 	const numberOfRetries = 5
 
+	var readAllChanneleEntries = func() {
+		checkForMore := true
+		for checkForMore {
+			select {
+			case batch := <-mm.insert:
+				queue = append(queue, queueEntry{numberOfRetries, batch})
+			default:
+				checkForMore = false
+			}
+		}
+	}
+
+	var writeAllQueueEntries = func() {
+		for len(queue) > 0 {
+			qe := queue[0]
+			queue = queue[1:]
+			if err := mm.dbClient.ExecuteBatch(qe.batch); err != nil {
+				config.G.Log.System.LogWarn("MetricManager::writer retrying write: %s", err.Error())
+				logging.Statsd.Client.Inc("metricmgr.db.retry", 1, 1.0)
+				qe.tries--
+				if qe.tries > 0 {
+					queue = append(queue, qe) // Stick it back in the queue
+				}
+				break // On errors, wait for the next timeout before retrying
+			} else {
+				config.G.Log.System.LogDebug("MetricManager::writer wrote batch. Remaining: %d", len(queue))
+			}
+			// Drain the channel after each write, so it can't fill up.
+			readAllChanneleEntries()
+		}
+	}
+
 	for {
 		select {
 		case <-mm.writerOnExit:
 			config.G.Log.System.LogDebug("MetricManager::writer received QUIT message")
+			readAllChanneleEntries()
+			writeAllQueueEntries()
 			mm.writerWG.Done()
 			return
 		case batch := <-mm.insert:
 			queue = append(queue, queueEntry{numberOfRetries, batch})
 		case <-time.After(time.Second):
-			for len(queue) > 0 {
-				qe := queue[0]
-				queue = queue[1:]
-				if err := mm.dbClient.ExecuteBatch(qe.batch); err != nil {
-					config.G.Log.System.LogWarn("MetricManager::writer retrying write: %s", err.Error())
-					logging.Statsd.Client.Inc("metricmgr.db.retry", 1, 1.0)
-					qe.tries--
-					if qe.tries > 0 {
-						queue = append(queue, qe) // Stick it back in the queue
-					}
-					break // On errors, wait for the next timeout before retrying
-				}
-				// Drain the channel after each write, so it can't fill up.
-				checkForMore := true
-				for checkForMore {
-					select {
-					case batch := <-mm.insert:
-						queue = append(queue, queueEntry{numberOfRetries, batch})
-					default:
-						checkForMore = false
-					}
-				}
-			}
+			writeAllQueueEntries()
 		}
 	}
 }
