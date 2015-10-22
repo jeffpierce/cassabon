@@ -320,6 +320,25 @@ func (mm *MetricManager) getExpression(path string) string {
 	return expr
 }
 
+// applyMethod combines values using the appropriate rollup method.
+func (mm *MetricManager) applyMethod(method config.RollupMethod, currentVal, newVal float64, count uint64) float64 {
+	switch method {
+	case config.AVERAGE:
+		currentVal = currentVal + newVal
+	case config.MAX:
+		if currentVal < newVal {
+			currentVal = newVal
+		}
+	case config.MIN:
+		if currentVal > newVal || count == 0 {
+			currentVal = newVal
+		}
+	case config.SUM:
+		currentVal = currentVal + newVal
+	}
+	return currentVal
+}
+
 // accumulate records a metric according to the rollup definitions.
 func (mm *MetricManager) accumulate(metric config.CarbonMetric) {
 	config.G.Log.System.LogDebug("MetricManager::accumulate %s=%v", metric.Path, metric.Value)
@@ -343,31 +362,9 @@ func (mm *MetricManager) accumulate(metric config.CarbonMetric) {
 	}
 
 	// Apply the incoming metric to each rollup bucket.
-	switch mm.rollup[currentRollup.expr].Method {
-	case config.AVERAGE:
-		for i, v := range currentRollup.value {
-			currentRollup.value[i] = v + metric.Value
-		}
-	case config.MAX:
-		for i, v := range currentRollup.value {
-			if v < metric.Value {
-				currentRollup.value[i] = metric.Value
-			}
-		}
-	case config.MIN:
-		for i, v := range currentRollup.value {
-			if v > metric.Value || currentRollup.count[i] == 0 {
-				currentRollup.value[i] = metric.Value
-			}
-		}
-	case config.SUM:
-		for i, v := range currentRollup.value {
-			currentRollup.value[i] = v + metric.Value
-		}
-	}
-
-	// Note that we added a data point into each bucket.
-	for i, _ := range currentRollup.count {
+	for i, v := range currentRollup.value {
+		currentRollup.value[i] = mm.applyMethod(
+			mm.rollup[currentRollup.expr].Method, v, metric.Value, currentRollup.count[i])
 		currentRollup.count[i]++
 	}
 }
