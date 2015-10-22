@@ -561,6 +561,18 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 
 			// Append the current stat.
 			if ts.Equal(nextTS) {
+				if mergeCount > 0 {
+					config.G.Log.System.LogDebug("---: %14.8f %v ( %v )", stat,
+						ts.Format("15:04:05.000"), nextTS.UTC().Format("15:04:05.000"))
+					mergeValue = mm.applyMethod(mm.rollup[expr].Method, mergeValue, stat, mergeCount)
+					mergeCount++
+					if mm.rollup[expr].Method == config.AVERAGE {
+						mergeValue = mergeValue / float64(mergeCount)
+					}
+					stat = mergeValue
+					mergeValue = 0
+					mergeCount = 0
+				}
 				config.G.Log.System.LogDebug("row: %14.8f %v ( %v )", stat,
 					ts.Format("15:04:05.000"), nextTS.UTC().Format("15:04:05.000"))
 				if math.IsNaN(stat) {
