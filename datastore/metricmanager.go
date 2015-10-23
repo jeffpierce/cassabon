@@ -182,38 +182,50 @@ func (mm *MetricManager) writer() {
 	var queue []queueEntry
 	const numberOfRetries = 5
 
+	var readAllChanneleEntries = func() {
+		checkForMore := true
+		for checkForMore {
+			select {
+			case batch := <-mm.insert:
+				queue = append(queue, queueEntry{numberOfRetries, batch})
+			default:
+				checkForMore = false
+			}
+		}
+	}
+
+	var writeAllQueueEntries = func() {
+		for len(queue) > 0 {
+			qe := queue[0]
+			queue = queue[1:]
+			if err := mm.dbClient.ExecuteBatch(qe.batch); err != nil {
+				config.G.Log.System.LogWarn("MetricManager::writer retrying write: %s", err.Error())
+				logging.Statsd.Client.Inc("metricmgr.db.retry", 1, 1.0)
+				qe.tries--
+				if qe.tries > 0 {
+					queue = append(queue, qe) // Stick it back in the queue
+				}
+				break // On errors, wait for the next timeout before retrying
+			} else {
+				config.G.Log.System.LogDebug("MetricManager::writer wrote batch. Remaining: %d", len(queue))
+			}
+			// Drain the channel after each write, so it can't fill up.
+			readAllChanneleEntries()
+		}
+	}
+
 	for {
 		select {
 		case <-mm.writerOnExit:
 			config.G.Log.System.LogDebug("MetricManager::writer received QUIT message")
+			readAllChanneleEntries()
+			writeAllQueueEntries()
 			mm.writerWG.Done()
 			return
 		case batch := <-mm.insert:
 			queue = append(queue, queueEntry{numberOfRetries, batch})
 		case <-time.After(time.Second):
-			for len(queue) > 0 {
-				qe := queue[0]
-				queue = queue[1:]
-				if err := mm.dbClient.ExecuteBatch(qe.batch); err != nil {
-					config.G.Log.System.LogWarn("MetricManager::writer retrying write: %s", err.Error())
-					logging.Statsd.Client.Inc("metricmgr.db.retry", 1, 1.0)
-					qe.tries--
-					if qe.tries > 0 {
-						queue = append(queue, qe) // Stick it back in the queue
-					}
-					break // On errors, wait for the next timeout before retrying
-				}
-				// Drain the channel after each write, so it can't fill up.
-				checkForMore := true
-				for checkForMore {
-					select {
-					case batch := <-mm.insert:
-						queue = append(queue, queueEntry{numberOfRetries, batch})
-					default:
-						checkForMore = false
-					}
-				}
-			}
+			writeAllQueueEntries()
 		}
 	}
 }
@@ -308,6 +320,25 @@ func (mm *MetricManager) getExpression(path string) string {
 	return expr
 }
 
+// applyMethod combines values using the appropriate rollup method.
+func (mm *MetricManager) applyMethod(method config.RollupMethod, currentVal, newVal float64, count uint64) float64 {
+	switch method {
+	case config.AVERAGE:
+		currentVal = currentVal + newVal
+	case config.MAX:
+		if currentVal < newVal {
+			currentVal = newVal
+		}
+	case config.MIN:
+		if currentVal > newVal || count == 0 {
+			currentVal = newVal
+		}
+	case config.SUM:
+		currentVal = currentVal + newVal
+	}
+	return currentVal
+}
+
 // accumulate records a metric according to the rollup definitions.
 func (mm *MetricManager) accumulate(metric config.CarbonMetric) {
 	config.G.Log.System.LogDebug("MetricManager::accumulate %s=%v", metric.Path, metric.Value)
@@ -331,32 +362,9 @@ func (mm *MetricManager) accumulate(metric config.CarbonMetric) {
 	}
 
 	// Apply the incoming metric to each rollup bucket.
-	switch mm.rollup[currentRollup.expr].Method {
-	case config.AVERAGE:
-		for i, v := range currentRollup.value {
-			currentRollup.value[i] = (v*float64(currentRollup.count[i]) + metric.Value) /
-				float64(currentRollup.count[i]+1)
-		}
-	case config.MAX:
-		for i, v := range currentRollup.value {
-			if v < metric.Value {
-				currentRollup.value[i] = metric.Value
-			}
-		}
-	case config.MIN:
-		for i, v := range currentRollup.value {
-			if v > metric.Value || currentRollup.count[i] == 0 {
-				currentRollup.value[i] = metric.Value
-			}
-		}
-	case config.SUM:
-		for i, v := range currentRollup.value {
-			currentRollup.value[i] = v + metric.Value
-		}
-	}
-
-	// Note that we added a data point into each bucket.
-	for i, _ := range currentRollup.count {
+	for i, v := range currentRollup.value {
+		currentRollup.value[i] = mm.applyMethod(
+			mm.rollup[currentRollup.expr].Method, v, metric.Value, currentRollup.count[i])
 		currentRollup.count[i]++
 	}
 }
@@ -404,15 +412,24 @@ func (mm *MetricManager) flush(terminating bool) {
 
 					if rollup.count[i] > 0 {
 						// Data has accumulated while this window was open; write it.
+						var value float64
+						if mm.rollup[expr].Method == config.AVERAGE {
+							// Calculate averages by dividing by the count.
+							value = rollup.value[i] / float64(rollup.count[i])
+						} else {
+							// Other rollup methods use the value as-is.
+							value = rollup.value[i]
+						}
+
 						if config.G.Log.System.GetLogLevel() < logging.Info {
 							config.G.Log.Carbon.LogInfo(
 								"match=%q tbl=%s ts=%v path=%s val=%.4f win=%v ret=%v ",
 								expr, mm.rollup[expr].Windows[i].Table,
-								statTime.Format("15:04:05.000"), path, rollup.value[i],
+								statTime.UTC().Format("15:04:05.000"), path, value,
 								mm.rollup[expr].Windows[i].Window, mm.rollup[expr].Windows[i].Retention)
 						}
 
-						bw.Append(path, statTime, rollup.value[i])
+						bw.Append(path, statTime, value)
 					}
 
 					// Ensure the bucket is empty for the next open window.
@@ -513,37 +530,90 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		// Populate statList with returned stats.
 		var statList []interface{} = make([]interface{}, 0)
 		var stat float64
+		var mergeCount uint64
+		var mergeValue float64
 		var ts, nextTS time.Time
-		nextTS = time.Unix(q.From, 0)
+		nextTS = nextTimeBoundary(time.Unix(q.From, 0), time.Duration(step)*time.Second)
 		iter := mm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
 		for iter.Scan(&stat, &ts) {
 
 			// Fill in any gaps in the series.
-			nextTS = nextTS.Add(time.Duration(step) * time.Second)
 			for nextTS.Before(ts) {
-				config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", 0.0, nextTS, ts)
-				statList = append(statList, nil)
+				if ts.Sub(nextTS) >= time.Duration(step)*time.Second {
+					if mergeCount > 0 {
+						if mm.rollup[expr].Method == config.AVERAGE {
+							// Calculate averages by dividing by the count.
+							mergeValue = mergeValue / float64(mergeCount)
+						}
+						config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", mergeValue,
+							nextTS.UTC().Format("15:04:05.000"), ts.Format("15:04:05.000"))
+						statList = append(statList, mergeValue)
+						mergeValue = 0
+						mergeCount = 0
+					} else {
+						config.G.Log.System.LogDebug("ins: %14s %v ( %v )", "nil",
+							nextTS.UTC().Format("15:04:05.000"), ts.Format("15:04:05.000"))
+						statList = append(statList, nil)
+					}
+				}
 				nextTS = nextTS.Add(time.Duration(step) * time.Second)
 			}
 
-			// Finally, append the current stat.
-			config.G.Log.System.LogDebug("row: %14.8f %v", stat, ts)
-			if math.IsNaN(stat) {
-				statList = append(statList, nil)
+			// Append the current stat.
+			if ts.Equal(nextTS) {
+				if mergeCount > 0 {
+					config.G.Log.System.LogDebug("---: %14.8f %v ( %v )", stat,
+						ts.Format("15:04:05.000"), nextTS.UTC().Format("15:04:05.000"))
+					mergeValue = mm.applyMethod(mm.rollup[expr].Method, mergeValue, stat, mergeCount)
+					mergeCount++
+					if mm.rollup[expr].Method == config.AVERAGE {
+						mergeValue = mergeValue / float64(mergeCount)
+					}
+					stat = mergeValue
+					mergeValue = 0
+					mergeCount = 0
+				}
+				config.G.Log.System.LogDebug("row: %14.8f %v ( %v )", stat,
+					ts.Format("15:04:05.000"), nextTS.UTC().Format("15:04:05.000"))
+				if math.IsNaN(stat) {
+					statList = append(statList, nil)
+				} else {
+					statList = append(statList, stat)
+				}
+				nextTS = ts.Add(time.Duration(step) * time.Second)
 			} else {
-				statList = append(statList, stat)
+				config.G.Log.System.LogDebug("---: %14.8f %v ( %v )", stat,
+					ts.Format("15:04:05.000"), nextTS.UTC().Format("15:04:05.000"))
+				mergeValue = mm.applyMethod(mm.rollup[expr].Method, mergeValue, stat, mergeCount)
+				mergeCount++
+				nextTS = nextTimeBoundary(ts, time.Duration(step)*time.Second)
 			}
 		}
+
 		if err := iter.Close(); err != nil {
 			config.G.Log.System.LogError("Error closing stat iteration: %s", err.Error())
 			logging.Statsd.Client.Inc("metricmgr.db.err.read", 1, 1.0)
+		}
+
+		// Write final data point, if there is one.
+		if mergeCount > 0 {
+			if mm.rollup[expr].Method == config.AVERAGE {
+				// Calculate averages by dividing by the count.
+				mergeValue = mergeValue / float64(mergeCount)
+			}
+			config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", mergeValue,
+				nextTS.UTC().Format("15:04:05.000"), ts.Format("15:04:05.000"))
+			statList = append(statList, mergeValue)
+			mergeValue = 0
+			mergeCount = 0
 		}
 
 		// Fill in gaps after the last data point.
 		to := time.Unix(q.To, 0)
 		nextTS = nextTS.Add(time.Duration(step) * time.Second)
 		for nextTS.Before(to) {
-			config.G.Log.System.LogDebug("ins: %14.8f %v ( %v )", 0.0, nextTS, to)
+			config.G.Log.System.LogDebug("pad: %14s %v ( %v )", "nil",
+				nextTS.UTC().Format("15:04:05.000"), to.UTC().Format("15:04:05.000"))
 			statList = append(statList, nil)
 			nextTS = nextTS.Add(time.Duration(step) * time.Second)
 		}

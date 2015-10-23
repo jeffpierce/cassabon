@@ -116,6 +116,18 @@ func LoadStartupValues() {
 	// Copy in the statsd configuration.
 	G.Statsd = rawCassabonConfig.Statsd
 
+	// Copy in the Cassandra database connection values.
+	G.Cassandra = rawCassabonConfig.Cassandra
+	if G.Cassandra.Keyspace == "" {
+		G.Cassandra.Keyspace = "cassabon"
+	}
+
+	// Copy in the Redis database connection values.
+	G.Redis = rawCassabonConfig.Redis
+	if G.Redis.PathKeyname == "" {
+		G.Redis.PathKeyname = "cassabon"
+	}
+
 	// Copy in and sanitize the channel lengths.
 	G.Channels.MetricStoreChanLen = rawCassabonConfig.Channels.MetricStoreChanLen
 	if G.Channels.MetricStoreChanLen < 10 {
@@ -245,18 +257,6 @@ func LoadRefreshableValues() {
 	G.API.Timeouts.DeleteIndex = time.Duration(time.Duration(rawCassabonConfig.API.Timeouts.DeleteIndex) * time.Second)
 	G.API.Timeouts.GetMetric = time.Duration(time.Duration(rawCassabonConfig.API.Timeouts.GetMetric) * time.Second)
 	G.API.Timeouts.DeleteMetric = time.Duration(time.Duration(rawCassabonConfig.API.Timeouts.DeleteMetric) * time.Second)
-
-	// Copy in the Cassandra database connection values.
-	G.Cassandra = rawCassabonConfig.Cassandra
-	if G.Cassandra.Keyspace == "" {
-		G.Cassandra.Keyspace = "cassabon"
-	}
-
-	// Copy in the Redis database connection values.
-	G.Redis = rawCassabonConfig.Redis
-	if G.Redis.PathKeyname == "" {
-		G.Redis.PathKeyname = "cassabon"
-	}
 }
 
 // LoadRollups populates the global config object with the rollup definitions,
