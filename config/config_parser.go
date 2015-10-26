@@ -274,6 +274,10 @@ func LoadRollups() {
 	var rd *RollupDef
 	reDuration := regexp.MustCompile("([0-9]+)([a-z])")
 
+	var retentionToTablename = func(retention time.Duration) string {
+		return fmt.Sprintf("rollup_%09d", uint64(retention.Seconds()))
+	}
+
 	// Inspect each rollup found in the configuration.
 	// Note: YAML decode has already folded duplicate path expressions.
 	for expression, v := range rawCassabonConfig.Rollups {
@@ -356,7 +360,7 @@ func LoadRollups() {
 			}
 
 			// Record this table name in the master list of table names.
-			table := fmt.Sprintf("rollup_%09d", uint64(retention.Seconds()))
+			table := retentionToTablename(retention)
 			found := false
 			for _, v := range G.RollupTables {
 				if table == v {
@@ -408,6 +412,26 @@ func LoadRollups() {
 				G.Log.System.LogWarn("Rollup expression rejected due to previous errors: \"%s\"", expression)
 			}
 		}
+	}
+
+	// If no default has been defined (or it was rejected), create one.
+	if _, found := G.Rollup[ROLLUP_CATCHALL]; !found {
+		// Default rollup method is "average".
+		rd = new(RollupDef)
+		rd.Method = AVERAGE
+		rd.Windows = make([]RollupWindow, 0)
+		// 10s:1h
+		retention := time.Hour
+		table := retentionToTablename(retention)
+		rd.Windows = append(rd.Windows, RollupWindow{time.Second * 10, retention, table})
+		// 1m:30d
+		retention = time.Hour * 24 * 30
+		table = retentionToTablename(retention)
+		rd.Windows = append(rd.Windows, RollupWindow{time.Minute, retention, table})
+		// Append to rollup list.
+		G.Rollup[ROLLUP_CATCHALL] = *rd
+		G.RollupPriority = append(G.RollupPriority, ROLLUP_CATCHALL)
+		G.Log.System.LogWarn("Default rollup missing or rejected, using \"10s:1h | 1m:30d | average\"")
 	}
 
 	// Sort the path expressions into priority order.
