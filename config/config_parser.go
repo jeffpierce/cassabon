@@ -378,7 +378,8 @@ func LoadRollups() {
 			// Sort windows into ascending duration order, and validate.
 			sort.Sort(ByWindow(rd.Windows))
 			shortestDuration := rd.Windows[0].Window
-			allExactMultiples := true
+			expressionOK := true
+			var tables = make(map[string]string)
 			for i, v := range rd.Windows {
 				if i > 0 {
 					remainder := v.Window % shortestDuration
@@ -386,13 +387,21 @@ func LoadRollups() {
 						G.Log.System.LogWarn(
 							"Next duration is not a multiple for \"%s\": %v %% %v remainder is %v",
 							expression, v.Window, shortestDuration, remainder)
-						allExactMultiples = false
+						expressionOK = false
 					}
+				}
+				if _, found := tables[v.Table]; !found {
+					tables[v.Table] = ""
+				} else {
+					G.Log.System.LogWarn(
+						"Next retention is duplicate for \"%s\": %v %v table %s",
+						expression, v.Window, v.Retention, v.Table)
+					expressionOK = false
 				}
 			}
 
 			// If all durations are exact multiples of the shortest duration, save this expression.
-			if allExactMultiples {
+			if expressionOK {
 				G.Rollup[expression] = *rd
 				G.RollupPriority = append(G.RollupPriority, expression)
 			} else {
