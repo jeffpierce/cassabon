@@ -164,7 +164,7 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 	_ = r.ParseForm()
 	from, _ := strconv.Atoi(r.Form.Get("from"))
 	to, _ := strconv.Atoi(r.Form.Get("to"))
-	q := config.MetricQuery{r.Method, r.Form["path"], int64(from), int64(to), ch}
+	q := config.MetricQuery{r.Method, r.Form["path"], int64(from), int64(to), false, ch}
 	config.G.Log.System.LogDebug("Received metrics query: %s %v %d %d", q.Method, q.Query, q.From, q.To)
 
 	// Forward the query.
@@ -189,9 +189,19 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 	// Create the channel on which the response will be received.
 	ch := make(chan config.APIQueryResponse)
 
-	// Build the query.
-	q := config.MetricQuery{r.Method, r.Form["path"], 0, 0, ch}
-	config.G.Log.System.LogDebug("Received metrics query: %s %v", q.Method, q.Query)
+	// Extract the query from the request URI.
+	var metric []string
+	_ = r.ParseForm()
+	metric = append(metric, c.URLParams["metric"])
+	from, _ := strconv.Atoi(r.Form.Get("from"))
+	to, _ := strconv.Atoi(r.Form.Get("to"))
+	dryrunText := r.Form.Get("dryrun")
+	dryrun := true
+	if strings.ToLower(dryrunText) == "false" || strings.ToLower(dryrunText) == "no" {
+		dryrun = false
+	}
+	q := config.MetricQuery{r.Method, metric, int64(from), int64(to), dryrun, ch}
+	config.G.Log.System.LogDebug("Received metrics query: %s %v %d %d %v", q.Method, q.Query, q.From, q.To, dryrun)
 
 	// Forward the query.
 	select {

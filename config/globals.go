@@ -36,6 +36,7 @@ type MetricQuery struct {
 	Query   []string              // Query
 	From    int64                 // Start of time window for metrics range
 	To      int64                 // End of time window for metrics range
+	DryRun  bool                  // For deletions, whether to actually delete
 	Channel chan APIQueryResponse // Channel to send response back on.
 }
 

@@ -477,7 +477,7 @@ func (mm *MetricManager) query(q config.MetricQuery) {
 	switch strings.ToLower(q.Method) {
 	case "delete":
 		mqdt := time.Now()
-		// TODO
+		mm.queryDELETE(q)
 		logging.Statsd.Client.TimingDuration("metricmgr.query.delete", time.Since(mqdt), 1.0)
 	default:
 		mqgt := time.Now()
@@ -486,10 +486,61 @@ func (mm *MetricManager) query(q config.MetricQuery) {
 	}
 }
 
+// delete removes rows matching a key from the metrics store.
+func (mm *MetricManager) queryDELETE(q config.MetricQuery) {
+
+	config.G.Log.System.LogDebug("MetricManager::queryDELETE %v", q)
+
+	// Query particulars are mandatory.
+	if len(q.Query) == 0 || q.Query[0] == "" {
+		q.Channel <- config.APIQueryResponse{config.AQS_BADREQUEST, "no query specified", []byte{}}
+		return
+	}
+
+	type deleteResponse struct {
+		Dryrun  bool              `json:"dryrun"`
+		Deleted uint64            `json:"approximate_total_deleted"`
+		ByTable map[string]uint64 `json:"approximate_total_bytable"`
+		Errors  map[string]string `json:"delete_errors"`
+	}
+	var delResp deleteResponse = deleteResponse{q.DryRun, 0, make(map[string]uint64), make(map[string]string)}
+
+	// The path could exist in any table, so look in all of them.
+	for _, table := range config.G.RollupTables {
+
+		// Get counts of the number of rows affected for providing dry-run analysis.
+		delResp.ByTable[table] = 0
+		query := fmt.Sprintf(`SELECT COUNT(*) FROM %s.%s WHERE path=? AND time>=? AND time<=?`,
+			config.G.Cassandra.Keyspace, table)
+		config.G.Log.System.LogDebug("Querying for %q with: %q", q.Query, query)
+		iter := mm.dbClient.Query(query, q.Query[0], time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
+		var count uint64
+		for iter.Scan(&count) {
+			delResp.ByTable[table] = count
+		}
+		delResp.Deleted += delResp.ByTable[table]
+
+		// If this isn't a dry run, do the deletions.
+		// Note: Cassandra provides no feedback on how may rows were actually deleted,
+		//       so we return the counts obtained above as an approximation.
+		if !q.DryRun && delResp.ByTable[table] > 0 {
+			query := fmt.Sprintf(`DELETE FROM %s.%s WHERE path=? AND time>=? AND time<=?`,
+				config.G.Cassandra.Keyspace, table)
+			config.G.Log.System.LogDebug("Deleting %q with: %q", q.Query, query)
+			if err := mm.dbClient.Query(query, q.Query[0], time.Unix(q.From, 0), time.Unix(q.To, 0)).Exec(); err != nil {
+				delResp.Errors[table] = err.Error()
+			}
+		}
+	}
+
+	// Send the response payload.
+	mm.sendResponse(q.Channel, &delResp)
+}
+
 // query returns the data matched by the supplied query.
 func (mm *MetricManager) queryGET(q config.MetricQuery) {
 
-	config.G.Log.System.LogDebug("MetricManager::query %v", q)
+	config.G.Log.System.LogDebug("MetricManager::queryGET %v", q)
 
 	// Query particulars are mandatory.
 	if len(q.Query) == 0 || q.Query[0] == "" {
@@ -623,8 +674,22 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		series[path] = statList
 	}
 
-	// Build the response payload and wrap it in the channel reply struct.
+	// Build the response payload and send it.
 	payload := MetricResponse{q.From, q.To, step, series}
+	mm.sendResponse(q.Channel, &payload)
+}
+
+// sendResponse takes care of the details of returning a response to the API code.
+func (mm *MetricManager) sendResponse(respChannel chan config.APIQueryResponse, payload interface{}) {
+
+	// If the API gave up on us because we took too long, writing to the channel
+	// will cause first a data race, and then a panic (write on closed channel).
+	// We check, but if we lose a race we will need to recover.
+	defer func() {
+		_ = recover()
+	}()
+
+	// Wrap the response payload in the channel reply struct.
 	var resp config.APIQueryResponse
 	if jsonResp, err := json.Marshal(payload); err == nil {
 		resp = config.APIQueryResponse{config.AQS_OK, "", jsonResp}
@@ -634,19 +699,12 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		logging.Statsd.Client.Inc("metricmgr.db.err.read", 1, 1.0)
 	}
 
-	// If the API gave up on us because we took too long, writing to the channel
-	// will cause first a data race, and then a panic (write on closed channel).
-	// We check, but if we lose a race we will need to recover.
-	defer func() {
-		_ = recover()
-	}()
-
 	// Check whether the channel is closed before attempting a write.
 	select {
-	case <-q.Channel:
+	case <-respChannel:
 		// Immediate return means channel is closed (we know there is no data in it).
 	default:
 		// If the channel would have blocked, it is open, we can write to it.
-		q.Channel <- resp
+		respChannel <- resp
 	}
 }
