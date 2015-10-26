@@ -261,7 +261,10 @@ func LoadRefreshableValues() {
 
 // LoadRollups populates the global config object with the rollup definitions,
 // which should only happen when there are no accumulated stats.
-func LoadRollups() {
+func LoadRollups() bool {
+
+	// Return success if there were no parse or configuration errors.
+	var configIsClean bool = true
 
 	// Validate, copy in and normalize the rollup definitions.
 	G.RollupPriority = make([]string, 0, len(rawCassabonConfig.Rollups))
@@ -294,6 +297,7 @@ func LoadRollups() {
 			method = SUM
 		default:
 			G.Log.System.LogWarn("Invalid aggregation method for \"%s\": %s", expression, v.Aggregation)
+			configIsClean = false
 			continue
 		}
 
@@ -306,6 +310,7 @@ func LoadRollups() {
 				rd.Expression = re
 			} else {
 				G.Log.System.LogWarn("Malformed regular expression for \"%s\": %s", expression, err.Error())
+				configIsClean = false
 				continue
 			}
 		}
@@ -317,18 +322,21 @@ func LoadRollups() {
 			couplet := strings.Split(s, ":")
 			if len(couplet) != 2 {
 				G.Log.System.LogWarn("Malformed definition for \"%s\": %s", expression, s)
+				configIsClean = false
 				continue
 			}
 
 			// Convert the window to a time.Duration.
 			if window, err = time.ParseDuration(couplet[0]); err != nil {
 				G.Log.System.LogWarn("Malformed window for \"%s\": %s %s", expression, s, couplet[0])
+				configIsClean = false
 				continue
 			}
 
 			// Don't permit windows shorter than 1 second.
 			if window < time.Second {
 				G.Log.System.LogWarn("Duration less than minimum 1 second for \"%s\": %v", expression, window)
+				configIsClean = false
 				continue
 			}
 
@@ -337,10 +345,12 @@ func LoadRollups() {
 			matches := reDuration.FindStringSubmatch(couplet[1]) // "1d" -> [ 1d 1 d ]
 			if len(matches) != 3 {
 				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
+				configIsClean = false
 				continue
 			}
 			if intRetention, err = strconv.ParseInt(matches[1], 10, 64); err != nil {
 				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
+				configIsClean = false
 				continue
 			}
 			switch matches[2] {
@@ -356,6 +366,7 @@ func LoadRollups() {
 				retention = time.Hour * 24 * 365 * time.Duration(intRetention)
 			default:
 				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
+				configIsClean = false
 				continue
 			}
 
@@ -409,6 +420,7 @@ func LoadRollups() {
 				G.Rollup[expression] = *rd
 				G.RollupPriority = append(G.RollupPriority, expression)
 			} else {
+				configIsClean = false
 				G.Log.System.LogWarn("Rollup expression rejected due to previous errors: \"%s\"", expression)
 			}
 		}
@@ -439,4 +451,6 @@ func LoadRollups() {
 
 	// Sort the table names.
 	sort.Strings(G.RollupTables)
+
+	return configIsClean
 }

@@ -22,6 +22,7 @@ func main() {
 
 	// The name of the YAML configuration file.
 	var confFile, loglevel string
+	var strict bool
 
 	// The WaitGroups for managing orderly goroutine reloads and termination.
 	var onReload1WG sync.WaitGroup // Wait on this if you receive external inputs
@@ -31,6 +32,7 @@ func main() {
 	// Get options provided on the command line.
 	flag.StringVar(&confFile, "conf", "config/cassabon.yaml", "Location of YAML configuration file")
 	flag.StringVar(&loglevel, "loglevel", "", "logging level, to override configuration until SIGHUP")
+	flag.BoolVar(&strict, "strict", true, "rollup configuration warnings are fatal")
 	flag.Parse()
 
 	// Create the loggers.
@@ -75,7 +77,9 @@ func main() {
 	// Now that we have a logger to report warnings, populate the remainder of the global config.
 	config.G.Log.System.LogInfo("Reading configuration file %s", confFile)
 	config.LoadRefreshableValues()
-	config.LoadRollups()
+	if !config.LoadRollups() && strict {
+		config.G.Log.System.LogFatal("Errors encountered while loading configuration")
+	}
 
 	// Set up reload and termination signal handlers.
 	var sighup = make(chan os.Signal, 1)
