@@ -261,7 +261,10 @@ func LoadRefreshableValues() {
 
 // LoadRollups populates the global config object with the rollup definitions,
 // which should only happen when there are no accumulated stats.
-func LoadRollups() {
+func LoadRollups() bool {
+
+	// Return success if there were no parse or configuration errors.
+	var configIsClean bool = true
 
 	// Validate, copy in and normalize the rollup definitions.
 	G.RollupPriority = make([]string, 0, len(rawCassabonConfig.Rollups))
@@ -273,6 +276,10 @@ func LoadRollups() {
 	var intRetention int64
 	var rd *RollupDef
 	reDuration := regexp.MustCompile("([0-9]+)([a-z])")
+
+	var retentionToTablename = func(retention time.Duration) string {
+		return fmt.Sprintf("rollup_%09d", uint64(retention.Seconds()))
+	}
 
 	// Inspect each rollup found in the configuration.
 	// Note: YAML decode has already folded duplicate path expressions.
@@ -290,6 +297,7 @@ func LoadRollups() {
 			method = SUM
 		default:
 			G.Log.System.LogWarn("Invalid aggregation method for \"%s\": %s", expression, v.Aggregation)
+			configIsClean = false
 			continue
 		}
 
@@ -302,6 +310,7 @@ func LoadRollups() {
 				rd.Expression = re
 			} else {
 				G.Log.System.LogWarn("Malformed regular expression for \"%s\": %s", expression, err.Error())
+				configIsClean = false
 				continue
 			}
 		}
@@ -313,18 +322,21 @@ func LoadRollups() {
 			couplet := strings.Split(s, ":")
 			if len(couplet) != 2 {
 				G.Log.System.LogWarn("Malformed definition for \"%s\": %s", expression, s)
+				configIsClean = false
 				continue
 			}
 
 			// Convert the window to a time.Duration.
 			if window, err = time.ParseDuration(couplet[0]); err != nil {
 				G.Log.System.LogWarn("Malformed window for \"%s\": %s %s", expression, s, couplet[0])
+				configIsClean = false
 				continue
 			}
 
 			// Don't permit windows shorter than 1 second.
 			if window < time.Second {
 				G.Log.System.LogWarn("Duration less than minimum 1 second for \"%s\": %v", expression, window)
+				configIsClean = false
 				continue
 			}
 
@@ -333,10 +345,12 @@ func LoadRollups() {
 			matches := reDuration.FindStringSubmatch(couplet[1]) // "1d" -> [ 1d 1 d ]
 			if len(matches) != 3 {
 				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
+				configIsClean = false
 				continue
 			}
 			if intRetention, err = strconv.ParseInt(matches[1], 10, 64); err != nil {
 				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
+				configIsClean = false
 				continue
 			}
 			switch matches[2] {
@@ -352,11 +366,12 @@ func LoadRollups() {
 				retention = time.Hour * 24 * 365 * time.Duration(intRetention)
 			default:
 				G.Log.System.LogWarn("Malformed retention for \"%s\": %s %s", expression, s, couplet[1])
+				configIsClean = false
 				continue
 			}
 
 			// Record this table name in the master list of table names.
-			table := fmt.Sprintf("rollup_%09d", uint64(retention.Seconds()))
+			table := retentionToTablename(retention)
 			found := false
 			for _, v := range G.RollupTables {
 				if table == v {
@@ -378,7 +393,8 @@ func LoadRollups() {
 			// Sort windows into ascending duration order, and validate.
 			sort.Sort(ByWindow(rd.Windows))
 			shortestDuration := rd.Windows[0].Window
-			allExactMultiples := true
+			expressionOK := true
+			var tables = make(map[string]string)
 			for i, v := range rd.Windows {
 				if i > 0 {
 					remainder := v.Window % shortestDuration
@@ -386,19 +402,48 @@ func LoadRollups() {
 						G.Log.System.LogWarn(
 							"Next duration is not a multiple for \"%s\": %v %% %v remainder is %v",
 							expression, v.Window, shortestDuration, remainder)
-						allExactMultiples = false
+						expressionOK = false
 					}
+				}
+				if _, found := tables[v.Table]; !found {
+					tables[v.Table] = ""
+				} else {
+					G.Log.System.LogWarn(
+						"Next retention is duplicate for \"%s\": %v %v table %s",
+						expression, v.Window, v.Retention, v.Table)
+					expressionOK = false
 				}
 			}
 
 			// If all durations are exact multiples of the shortest duration, save this expression.
-			if allExactMultiples {
+			if expressionOK {
 				G.Rollup[expression] = *rd
 				G.RollupPriority = append(G.RollupPriority, expression)
 			} else {
+				configIsClean = false
 				G.Log.System.LogWarn("Rollup expression rejected due to previous errors: \"%s\"", expression)
 			}
 		}
+	}
+
+	// If no default has been defined (or it was rejected), create one.
+	if _, found := G.Rollup[ROLLUP_CATCHALL]; !found {
+		// Default rollup method is "average".
+		rd = new(RollupDef)
+		rd.Method = AVERAGE
+		rd.Windows = make([]RollupWindow, 0)
+		// 10s:1h
+		retention := time.Hour
+		table := retentionToTablename(retention)
+		rd.Windows = append(rd.Windows, RollupWindow{time.Second * 10, retention, table})
+		// 1m:30d
+		retention = time.Hour * 24 * 30
+		table = retentionToTablename(retention)
+		rd.Windows = append(rd.Windows, RollupWindow{time.Minute, retention, table})
+		// Append to rollup list.
+		G.Rollup[ROLLUP_CATCHALL] = *rd
+		G.RollupPriority = append(G.RollupPriority, ROLLUP_CATCHALL)
+		G.Log.System.LogWarn("Default rollup missing or rejected, using \"10s:1h | 1m:30d | average\"")
 	}
 
 	// Sort the path expressions into priority order.
@@ -406,4 +451,6 @@ func LoadRollups() {
 
 	// Sort the table names.
 	sort.Strings(G.RollupTables)
+
+	return configIsClean
 }
