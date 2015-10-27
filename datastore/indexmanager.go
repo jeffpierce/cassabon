@@ -138,13 +138,9 @@ func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLea
 func (im *IndexManager) query(q config.IndexQuery) {
 	switch strings.ToLower(q.Method) {
 	case "delete":
-		qdt := time.Now()
 		// TODO
-		logging.Statsd.Client.TimingDuration("indexmgr.query.delete", time.Since(qdt), 1.0)
 	default:
-		qgt := time.Now()
 		im.queryGET(q)
-		logging.Statsd.Client.TimingDuration("indexmgr.query.get", time.Since(qgt), 1.0)
 	}
 }
 
