@@ -476,13 +476,9 @@ func (mm *MetricManager) flush(terminating bool) {
 func (mm *MetricManager) query(q config.MetricQuery) {
 	switch strings.ToLower(q.Method) {
 	case "delete":
-		mqdt := time.Now()
 		mm.queryDELETE(q)
-		logging.Statsd.Client.TimingDuration("metricmgr.query.delete", time.Since(mqdt), 1.0)
 	default:
-		mqgt := time.Now()
 		mm.queryGET(q)
-		logging.Statsd.Client.TimingDuration("metricmgr.query.get", time.Since(mqgt), 1.0)
 	}
 }
 
