@@ -198,6 +198,7 @@ func (mm *MetricManager) writer() {
 		for len(queue) > 0 {
 			qe := queue[0]
 			queue = queue[1:]
+			writeCount := qe.batch.Size()
 			if err := mm.dbClient.ExecuteBatch(qe.batch); err != nil {
 				config.G.Log.System.LogWarn("MetricManager::writer retrying write: %s", err.Error())
 				logging.Statsd.Client.Inc("metricmgr.db.retry", 1, 1.0)
@@ -208,6 +209,7 @@ func (mm *MetricManager) writer() {
 				break // On errors, wait for the next timeout before retrying
 			} else {
 				config.G.Log.System.LogDebug("MetricManager::writer wrote batch. Remaining: %d", len(queue))
+				logging.Statsd.Client.Inc("metricmgr.db.insert", int64(writeCount), 1.0)
 			}
 			// Drain the channel after each write, so it can't fill up.
 			readAllChanneleEntries()
