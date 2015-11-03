@@ -1,19 +1,18 @@
 package datastore
 
 import (
+	"bytes"
 	"encoding/json"
-	"fmt"
-	"regexp"
+	"io/ioutil"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"gopkg.in/redis.v3"
-
 	"github.com/jeffpierce/cassabon/config"
 	"github.com/jeffpierce/cassabon/logging"
-	"github.com/jeffpierce/cassabon/middleware"
 )
 
 // IndexResponse defines the individual elements returned as an array by "GET /paths".
@@ -24,9 +23,36 @@ type IndexResponse struct {
 	Leaf   bool   `json:"leaf"`
 }
 
+// ElasticResponse is the struct we unmarshal the response from an ElasticSearch query to.
+type ElasticResponse struct {
+	Took     int      `json:"took"`
+	TimedOut bool     `json:"timed_out"`
+	Shards   ERShards `json:"_shards"`
+	Hits     ERHits   `json:"hits"`
+}
+
+type ERShards struct {
+	Total      int `json:"total"`
+	Successful int `json:"successful"`
+	Failed     int `json:"failed"`
+}
+
+type ERHits struct {
+	Total    int           `json:"total"`
+	MaxScore float32       `json:"max_score"`
+	Hits     []ERSearchHit `json:"hits"`
+}
+
+type ERSearchHit struct {
+	Index  string        `json:"_index"`
+	Type   string        `json:"_type"`
+	ID     string        `json:"_id"`
+	Score  float32       `json:"_score"`
+	Source IndexResponse `json:"_source"`
+}
+
 type IndexManager struct {
 	wg *sync.WaitGroup
-	rc *redis.Client
 }
 
 func (im *IndexManager) Init() {
@@ -41,34 +67,6 @@ func (im *IndexManager) Start(wg *sync.WaitGroup) {
 func (im *IndexManager) run() {
 
 	defer config.G.OnPanic()
-
-	// Initialize Redis client pool.
-	var err error
-	if config.G.Redis.Sentinel {
-		config.G.Log.System.LogDebug("IndexManager initializing Redis client (Sentinel)")
-		im.rc, err = middleware.RedisFailoverClient(
-			config.G.Redis.Addr,
-			config.G.Redis.Pwd,
-			config.G.Redis.Master,
-			config.G.Redis.DB,
-		)
-	} else {
-		config.G.Log.System.LogDebug("IndexManager initializing Redis client")
-		im.rc, err = middleware.RedisClient(
-			config.G.Redis.Addr,
-			config.G.Redis.Pwd,
-			config.G.Redis.DB,
-		)
-	}
-
-	if err != nil {
-		// Without Redis client we can't do our job, so log, whine, and crash.
-		config.G.Log.System.LogFatal("IndexManager unable to connect to Redis at %v: %s",
-			config.G.Redis.Addr, err.Error())
-	}
-
-	defer im.rc.Close()
-	config.G.Log.System.LogDebug("IndexManager Redis client initialized")
 
 	// Wait for entries to arrive, and process them.
 	for {
@@ -85,8 +83,7 @@ func (im *IndexManager) run() {
 	}
 }
 
-// IndexMetricPath takes a metric path string and redis client, starts a pipeline, splits the metric,
-// and sends it off to be processed by processMetricPath().
+// IndexMetricPath takes a metric path string and sends it off to be processed by processMetricPath().
 func (im *IndexManager) index(path string) {
 	it := time.Now()
 	config.G.Log.System.LogDebug("IndexManager::index path=%s", path)
@@ -95,42 +92,60 @@ func (im *IndexManager) index(path string) {
 	logging.Statsd.Client.TimingDuration("indexmgr.index", time.Since(it), 1.0)
 }
 
-// processMetricPath recursively indexes the metric path via the redis pipeline.
+func (im *IndexManager) httpRequest(req *http.Request) *http.Response {
+	client := &http.Client{}
+	resp, err := client.Do(req)
+
+	if err != nil {
+		logging.Statsd.Client.Inc("indexmgr.es.request.err", 1, 1.0)
+		config.G.Log.System.LogError("Received error from ElasticSearch: %v, request: %v", err.Error(), req)
+		return nil
+	}
+
+	return resp
+}
+
+// processMetricPath recursively indexes the metric path via the ElasticSearch REST API.
 func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLeaf bool) {
-	// Process the metric path one node at a time.  We store metrics in Redis as a sorted set with score
-	// 0 so that lexicographical search works.  Metrics are in the format of:
-	//
-	// big_endian_length:metric.path:true_or_false
-	//
-	// This keeps them ordered so that a ZRANGEBYLEX works when finding the next nodes in a path branch.
-
-	pipe := im.rc.Pipeline()
-
+	// Process the metric path one node at a time.  We store metrics in ElasticSearch.
 	for pathLen > 0 {
 
 		// Construct the metric string
-		metricPath := strings.Join([]string{
-			ToBigEndianString(pathLen),
-			strings.Join(splitPath, "."),
-			strconv.FormatBool(isLeaf)}, ":")
+		metricPath := strings.Join(splitPath, ".")
 		config.G.Log.System.LogDebug("IndexManager indexing \"%s\"", metricPath)
 
-		z := redis.Z{0, metricPath}
+		pathToIndex := IndexResponse{
+			metricPath,
+			pathLen,
+			"",
+			isLeaf,
+		}
 
-		// Put it in the pipeline.
-		pipe.ZAdd(config.G.Redis.PathKeyname, z)
+		urlToPut := strings.Join([]string{config.G.ElasticSearch.PutURL, metricPath}, "/")
+
+		// Marshal the struct into JSON
+		jsonPath, err := json.Marshal(pathToIndex)
+
+		if err != nil {
+			logging.Statsd.Client.Inc("indexmgr.es.err.json", 1, 1.0)
+			config.G.Log.System.LogError("Unable to marshal pathToIndex of %v, error is %v", pathToIndex, err.Error())
+			return // Let's not fill up ES with junk if we can't marshal our path struct.
+		}
+
+		putreq, err := http.NewRequest("PUT", urlToPut, bytes.NewBuffer(jsonPath))
+
+		if err != nil {
+			logging.Statsd.Client.Inc("indexmgr.es.err.put", 1, 1.0)
+			config.G.Log.System.LogError("Error when attempting to index %v: %v", metricPath, err.Error())
+		}
+
+		r := im.httpRequest(putreq)
+		defer r.Body.Close()
 
 		// Pop the last node of the metric off, set isLeaf to false, and resume loop.
 		_, splitPath = splitPath[len(splitPath)-1], splitPath[:len(splitPath)-1]
 		isLeaf = false
 		pathLen = len(splitPath)
-	}
-
-	_, err := pipe.Exec()
-	if err != nil {
-		// How do we want to degrade gracefully when this fails?
-		config.G.Log.System.LogError("Redis error: %s", err.Error())
-		logging.Statsd.Client.Inc("indexmgr.db.err.write", 1, 1.0)
 	}
 }
 
@@ -155,22 +170,43 @@ func (im *IndexManager) queryGET(q config.IndexQuery) {
 		return
 	}
 
-	// Split it since we need the node length for the Redis Query
-	queryNodes := strings.Split(q.Query, ".")
+	// Get number of nodes in the path for the ElasticSearch Query
+	pathDepth := len(strings.Split(q.Query, "."))
 
-	// Split on wildcards.
-	splitWild := strings.Split(q.Query, "*")
-
-	// Determine if we need a simple query or a complex one.
-	// len(splitWild) == 2 and splitWild[1] == "" means we have an ending wildcard only.
+	var esResp ElasticResponse
+	var respList []IndexResponse
 	var resp config.APIQueryResponse
-	if len(splitWild) == 1 {
-		resp = im.noWild(q.Query, len(queryNodes))
-	} else if len(splitWild) == 2 && splitWild[1] == "" {
-		resp = im.simpleWild(splitWild[0], len(queryNodes))
+
+	params := url.Values{}
+	pathQuery := "path:" + q.Query
+	depthQuery := "depth:" + strconv.Itoa(pathDepth)
+	params.Add("q", pathQuery)
+	params.Add("q", depthQuery)
+
+	urlToGet := strings.Join([]string{config.G.ElasticSearch.SearchURL, params.Encode()}, "?")
+	config.G.Log.System.LogDebug("url=%v", urlToGet)
+	getreq, err := http.Get(urlToGet)
+	defer getreq.Body.Close()
+
+	if err != nil {
+		logging.Statsd.Client.Inc("indexmgr.es.err.get", 1, 1.0)
+		config.G.Log.System.LogError("Error querying ES: %v", err.Error())
+		resp = config.APIQueryResponse{config.AQS_ERROR, "Error querying ES", []byte{}}
 	} else {
-		resp = im.complexWild(splitWild, len(queryNodes))
+		body, _ := ioutil.ReadAll(getreq.Body)
+		config.G.Log.System.LogDebug("body: %v", string(body))
+		_ = json.Unmarshal(body, &esResp)
+
+		config.G.Log.System.LogDebug("esResp: %v", esResp)
+
+		for _, hit := range esResp.Hits.Hits {
+			respList = append(respList, hit.Source)
+		}
 	}
+
+	jsonResp, _ := json.Marshal(respList)
+
+	resp = config.APIQueryResponse{config.AQS_OK, "", jsonResp}
 
 	// If the API gave up on us because we took too long, writing to the channel
 	// will cause first a data race, and then a panic (write on closed channel).
@@ -187,143 +223,4 @@ func (im *IndexManager) queryGET(q config.IndexQuery) {
 		// If the channel would have blocked, it is open, we can write to it.
 		q.Channel <- resp
 	}
-}
-
-// getMax returns the max range parameter for a ZRANGEBYLEX.
-func (im *IndexManager) getMax(s string) string {
-
-	var max string
-
-	if s[len(s)-1:] == "." || s[len(s)-1:] == ":" {
-		// If a dot is on the end, the max path has to have a \ put before the final dot.
-		max = strings.Join([]string{s[:len(s)-1], `\`, s[len(s)-1:], `\xff`}, "")
-	} else {
-		// If a dot's not on the end, just append "\xff"
-		max = strings.Join([]string{s, `\xff`}, "")
-	}
-
-	return max
-}
-
-// noWild performs fetches for strings with no wildcard characters.
-func (im *IndexManager) noWild(q string, l int) config.APIQueryResponse {
-
-	// No wild card means we should be retrieving one stat, or none at all.
-	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", q, ":"}, "")
-	queryStringMax := im.getMax(queryString)
-
-	resp, err := im.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
-		queryString, queryStringMax, 0, 0,
-	}).Result()
-
-	if err != nil {
-		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
-		logging.Statsd.Client.Inc("indexmgr.err.db.read", 1, 1.0)
-		return config.APIQueryResponse{config.AQS_ERROR, err.Error(), []byte{}}
-	}
-	if len(resp) == 0 {
-		// Return an empty array.
-		return config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
-	}
-
-	return config.APIQueryResponse{config.AQS_OK, "", im.processQueryResults(resp, l)}
-}
-
-// simpleWild performs fetches for strings with one wildcard char, in the last position.
-func (im *IndexManager) simpleWild(q string, l int) config.APIQueryResponse {
-
-	// Queries with an ending wild card only are easy, as the response from
-	// ZRANGEBYLEX <key> [bigE_len:path [bigE_len:path\xff is the answer.
-	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", q}, "")
-	queryStringMax := im.getMax(queryString)
-
-	// Perform the query.
-	resp, err := im.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
-		queryString, queryStringMax, 0, 0,
-	}).Result()
-
-	if err != nil {
-		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
-		logging.Statsd.Client.Inc("indexmgr.err.db.read", 1, 1.0)
-		return config.APIQueryResponse{config.AQS_ERROR, err.Error(), []byte{}}
-	}
-	if len(resp) == 0 {
-		// Return an empty array.
-		return config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
-	}
-
-	return config.APIQueryResponse{config.AQS_OK, "", im.processQueryResults(resp, l)}
-}
-
-// complexWild performs fetches for strings with multiple wildcard characters.
-func (im *IndexManager) complexWild(splitWild []string, l int) config.APIQueryResponse {
-
-	// Resolve multiple wildcards by pulling in the nodes with length l that start with
-	// the first part of the non-wildcard, then filter that set with a regex match.
-	var matches []string
-
-	queryString := strings.Join([]string{"[", ToBigEndianString(l), ":", splitWild[0]}, "")
-	queryStringMax := im.getMax(queryString)
-
-	config.G.Log.System.LogDebug(
-		"complexWild querying redis with %s, %s as range", queryString, queryStringMax)
-
-	resp, err := im.rc.ZRangeByLex(config.G.Redis.PathKeyname, redis.ZRangeByScore{
-		queryString, queryStringMax, 0, 0,
-	}).Result()
-
-	config.G.Log.System.LogDebug(
-		"Received %v as response from redis.", resp)
-
-	if err != nil {
-		config.G.Log.System.LogWarn("Redis read error: %s", err.Error())
-		logging.Statsd.Client.Inc("indexmgr.err.db.read", 1, 1.0)
-		return config.APIQueryResponse{config.AQS_ERROR, err.Error(), []byte{}}
-	}
-	if len(resp) == 0 {
-		// Return an empty array.
-		return config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
-	}
-
-	// Build regular expression to match against results.
-	rawRegex := strings.Join(splitWild, `.*`)
-	config.G.Log.System.LogDebug("Attempting to compile %s into regex", rawRegex)
-	regex, err := regexp.Compile(rawRegex)
-	if err != nil {
-		errMsg := fmt.Sprintf("Could not compile %s into regex: %s", rawRegex, err.Error())
-		config.G.Log.System.LogWarn(errMsg)
-		logging.Statsd.Client.Inc("indexmgr.err.regex", 1, 1.0)
-		return config.APIQueryResponse{config.AQS_BADREQUEST, errMsg, []byte{}}
-	}
-
-	for _, iter := range resp {
-		config.G.Log.System.LogDebug("Attempting to match %s against %s", rawRegex, iter)
-		if regex.MatchString(iter) {
-			matches = append(matches, iter)
-		}
-	}
-
-	if len(matches) > 0 {
-		return config.APIQueryResponse{config.AQS_OK, "", im.processQueryResults(matches, l)}
-	} else {
-		// Return an empty array.
-		return config.APIQueryResponse{config.AQS_OK, "", []byte{'[', ']'}}
-	}
-}
-
-// processQueryResults converts the results to JSON text.
-func (im *IndexManager) processQueryResults(results []string, l int) []byte {
-
-	var responseList []IndexResponse
-
-	// Process the result into a map, make it a string, send it along is the goal here.
-	for _, match := range results {
-		decodedString := strings.Split(match, ":")
-		isLeaf, _ := strconv.ParseBool(decodedString[2])
-		m := IndexResponse{decodedString[1], l, "", isLeaf}
-		responseList = append(responseList, m)
-	}
-
-	jsonText, _ := json.Marshal(responseList)
-	return jsonText
 }
