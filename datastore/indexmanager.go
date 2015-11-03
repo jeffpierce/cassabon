@@ -80,7 +80,7 @@ func (im *IndexManager) run() {
 			im.wg.Done()
 			return
 		case metric := <-config.G.Channels.IndexStore:
-			im.index(metric.Path)
+			go im.index(metric.Path)
 		case query := <-config.G.Channels.IndexRequest:
 			go im.query(query)
 		}
@@ -96,8 +96,8 @@ func (im *IndexManager) index(path string) {
 	logging.Statsd.Client.TimingDuration("indexmgr.index", time.Since(it), 1.0)
 }
 
-func (im *IndexManager) httpRequest(req *http.Request) *http.Response {
-	client := &http.Client{}
+func (im *IndexManager) httpRequest(req *http.Request) []byte {
+	client := &http.Client{Timeout: time.Duration(5 * time.Second)}
 	resp, err := client.Do(req)
 
 	if err != nil {
@@ -106,7 +106,9 @@ func (im *IndexManager) httpRequest(req *http.Request) *http.Response {
 		return nil
 	}
 
-	return resp
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
+	return body
 }
 
 // processMetricPath recursively indexes the metric path via the ElasticSearch REST API.
@@ -144,24 +146,29 @@ func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLea
 		}
 
 		r := im.httpRequest(putreq)
-		defer r.Body.Close()
-
-		// Pop the last node of the metric off, set isLeaf to false, and resume loop.
-		_, splitPath = splitPath[len(splitPath)-1], splitPath[:len(splitPath)-1]
-		isLeaf = false
-		pathLen = len(splitPath)
+		if r != nil {
+			// Pop the last node of the metric off, set isLeaf to false, and resume loop.
+			_, splitPath = splitPath[len(splitPath)-1], splitPath[:len(splitPath)-1]
+			isLeaf = false
+			pathLen = len(splitPath)
+		} else {
+			logging.Statsd.Client.Inc("indexmgr.es.err.pmr.req", 1, 1.0)
+			config.G.Log.System.LogError("Error: processMetricPath's httprequest to ES came back as nil, putreq is %v", putreq)
+			return // Again, let's not fill up ES with junk.
+		}
 	}
 }
 
 func (im *IndexManager) getCount(req *http.Request) string {
 	var resp ElasticResponse
 	r := im.httpRequest(req)
-	defer r.Body.Close()
-
-	body, _ := ioutil.ReadAll(r.Body)
-	_ = json.Unmarshal(body, &resp)
-	config.G.Log.System.LogDebug("total: %v", resp.Hits.Total)
-	return strconv.Itoa(resp.Hits.Total)
+	if r != nil {
+		_ = json.Unmarshal(r, &resp)
+		config.G.Log.System.LogDebug("total: %v", resp.Hits.Total)
+		return strconv.Itoa(resp.Hits.Total)
+	} else {
+		return "0"
+	}
 }
 
 // query returns the data matched by the supplied query.
@@ -230,16 +237,9 @@ func (im *IndexManager) queryGET(q config.IndexQuery) {
 	searchURL := strings.Join([]string{config.G.ElasticSearch.SearchURL, size}, "?")
 	getreq, _ := http.NewRequest("GET", searchURL, strings.NewReader(string(jsonQuery)))
 	r := im.httpRequest(getreq)
-	defer r.Body.Close()
 
-	if r == nil {
-		logging.Statsd.Client.Inc("indexmgr.es.err.get", 1, 1.0)
-		config.G.Log.System.LogError("Error querying ES.")
-		resp = config.APIQueryResponse{config.AQS_ERROR, "Error querying ES", []byte{}}
-	} else {
-		body, _ := ioutil.ReadAll(r.Body)
-		config.G.Log.System.LogDebug("body: %v", string(body))
-		_ = json.Unmarshal(body, &esResp)
+	if r != nil {
+		_ = json.Unmarshal(r, &esResp)
 
 		config.G.Log.System.LogDebug("esResp: %v", esResp)
 
@@ -250,6 +250,10 @@ func (im *IndexManager) queryGET(q config.IndexQuery) {
 		jsonResp, _ := json.Marshal(respList)
 
 		resp = config.APIQueryResponse{config.AQS_OK, "", jsonResp}
+	} else {
+		logging.Statsd.Client.Inc("indexmgr.es.err.get", 1, 1.0)
+		config.G.Log.System.LogError("Error querying ES.")
+		resp = config.APIQueryResponse{config.AQS_ERROR, "Error querying ES", []byte{}}
 	}
 
 	// If the API gave up on us because we took too long, writing to the channel
