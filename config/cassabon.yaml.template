@@ -48,14 +48,9 @@ cassandra:
     strategy: "SimpleStrategy"
     createopts: "'replication_factor':1"
     batchsize: 2
-redis:
-    addr:
-        - "127.0.0.1:6379"
-    db: 5
-    pwd: ""
-    pathkeyname: "cassabon_dev"
-    sentinel: false
-    master: ""
+elasticsearch:
+    baseurl: "http://localhost:9200"
+    index: "cassabon_dev"
 #
 # Rollups could be re-processed when all rollup accumulators have been flushed,
 # but this is not implemented. Full restart is required when rollups change.

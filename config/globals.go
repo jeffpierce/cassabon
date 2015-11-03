@@ -138,7 +138,7 @@ type Globals struct {
 
 	Cassandra CassandraSettings
 
-	Redis RedisSettings
+	ElasticSearch ElasticSearchSettings
 
 	// Configuration of data rollups.
 	RollupPriority []string             // First matched expression wins
