@@ -72,6 +72,7 @@ type ElasticSearchSettings struct {
 	Index     string // ElasticSearch Index
 	PutURL    string // URL for indexing paths
 	SearchURL string // URL for searching paths.
+	CountURL  string // URL for getting a count for the search path
 }
 
 type StatsdSettings struct {
@@ -129,7 +130,8 @@ func LoadStartupValues() {
 		G.ElasticSearch.Index = "cassabon"
 	}
 	G.ElasticSearch.PutURL = strings.Join([]string{G.ElasticSearch.BaseURL, G.ElasticSearch.Index, "path"}, "/")
-	G.ElasticSearch.SearchURL = strings.Join([]string{G.ElasticSearch.BaseURL, "_search"}, "/")
+	G.ElasticSearch.SearchURL = strings.Join([]string{G.ElasticSearch.PutURL, "_search"}, "/")
+	G.ElasticSearch.CountURL = strings.Join([]string{G.ElasticSearch.SearchURL, "search_type=count"}, "?")
 
 	// Copy in and sanitize the channel lengths.
 	G.Channels.MetricStoreChanLen = rawCassabonConfig.Channels.MetricStoreChanLen
