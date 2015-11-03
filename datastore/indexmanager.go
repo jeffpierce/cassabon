@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +48,11 @@ type ERSearchHit struct {
 	Score  float32       `json:"_score"`
 	Source IndexResponse `json:"_source"`
 }
+
+/* the following turtles-all-the-way-down cluster@#$% of nested structs
+   is here to marshal into JSON below.  Anyone who wants to clean this up,
+   please do.  But thus ugly, ugly, ugly hack works.
+*/
 
 type IndexManager struct {
 	wg *sync.WaitGroup
@@ -177,23 +180,40 @@ func (im *IndexManager) queryGET(q config.IndexQuery) {
 	var respList []IndexResponse
 	var resp config.APIQueryResponse
 
-	params := url.Values{}
-	pathQuery := "path:" + q.Query
-	depthQuery := "depth:" + strconv.Itoa(pathDepth)
-	params.Add("q", pathQuery)
-	params.Add("q", depthQuery)
+	// It's turtles all the way down!  This is totalle Vijay's fault.
+	// http://github.com/vijaykramesh -- JP
+	query := map[string]map[string]map[string][]map[string]map[string]interface{}{
+		"query": map[string]map[string][]map[string]map[string]interface{}{
+			"bool": map[string][]map[string]map[string]interface{}{
+				"must": []map[string]map[string]interface{}{
+					{
+						"wildcard": map[string]interface{}{
+							"path": q.Query,
+						},
+					},
+					{
+						"match": map[string]interface{}{
+							"depth": pathDepth,
+						},
+					},
+				},
+			},
+		},
+	}
 
-	urlToGet := strings.Join([]string{config.G.ElasticSearch.SearchURL, params.Encode()}, "?")
-	config.G.Log.System.LogDebug("url=%v", urlToGet)
-	getreq, err := http.Get(urlToGet)
-	defer getreq.Body.Close()
+	jsonQuery, _ := json.Marshal(query)
+	config.G.Log.System.LogDebug("%s", string(jsonQuery))
 
-	if err != nil {
+	getreq, _ := http.NewRequest("GET", config.G.ElasticSearch.SearchURL, strings.NewReader(string(jsonQuery)))
+	r := im.httpRequest(getreq)
+	defer r.Body.Close()
+
+	if r == nil {
 		logging.Statsd.Client.Inc("indexmgr.es.err.get", 1, 1.0)
-		config.G.Log.System.LogError("Error querying ES: %v", err.Error())
+		config.G.Log.System.LogError("Error querying ES.")
 		resp = config.APIQueryResponse{config.AQS_ERROR, "Error querying ES", []byte{}}
 	} else {
-		body, _ := ioutil.ReadAll(getreq.Body)
+		body, _ := ioutil.ReadAll(r.Body)
 		config.G.Log.System.LogDebug("body: %v", string(body))
 		_ = json.Unmarshal(body, &esResp)
 
