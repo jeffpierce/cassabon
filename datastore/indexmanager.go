@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,11 @@ type ERSearchHit struct {
 	ID     string        `json:"_id"`
 	Score  float32       `json:"_score"`
 	Source IndexResponse `json:"_source"`
+}
+
+type ERQuery struct {
+	Sort  []map[string]map[string]string                            `json:"sort"`
+	Query map[string]map[string][]map[string]map[string]interface{} `json:"query"`
 }
 
 type IndexManager struct {
@@ -147,6 +153,17 @@ func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLea
 	}
 }
 
+func (im *IndexManager) getCount(req *http.Request) string {
+	var resp ElasticResponse
+	r := im.httpRequest(req)
+	defer r.Body.Close()
+
+	body, _ := ioutil.ReadAll(r.Body)
+	_ = json.Unmarshal(body, &resp)
+	config.G.Log.System.LogDebug("total: %v", resp.Hits.Total)
+	return strconv.Itoa(resp.Hits.Total)
+}
+
 // query returns the data matched by the supplied query.
 func (im *IndexManager) query(q config.IndexQuery) {
 	switch strings.ToLower(q.Method) {
@@ -177,29 +194,41 @@ func (im *IndexManager) queryGET(q config.IndexQuery) {
 
 	// It's turtles all the way down!  This is totalle Vijay's fault.
 	// http://github.com/vijaykramesh -- JP
-	query := map[string]map[string]map[string][]map[string]map[string]interface{}{
-		"query": map[string]map[string][]map[string]map[string]interface{}{
-			"bool": map[string][]map[string]map[string]interface{}{
-				"must": []map[string]map[string]interface{}{
-					{
-						"wildcard": map[string]interface{}{
-							"path": q.Query,
-						},
+	sort := []map[string]map[string]string{
+		{
+			"path": map[string]string{
+				"order": "asc",
+			},
+		},
+	}
+	query := map[string]map[string][]map[string]map[string]interface{}{
+		"bool": map[string][]map[string]map[string]interface{}{
+			"must": []map[string]map[string]interface{}{
+				{
+					"wildcard": map[string]interface{}{
+						"path": q.Query,
 					},
-					{
-						"match": map[string]interface{}{
-							"depth": pathDepth,
-						},
+				},
+				{
+					"match": map[string]interface{}{
+						"depth": pathDepth,
 					},
 				},
 			},
 		},
 	}
 
-	jsonQuery, _ := json.Marshal(query)
+	fullQuery := ERQuery{sort, query}
+
+	jsonQuery, _ := json.Marshal(fullQuery)
 	config.G.Log.System.LogDebug("%s", string(jsonQuery))
 
-	getreq, _ := http.NewRequest("GET", config.G.ElasticSearch.SearchURL, strings.NewReader(string(jsonQuery)))
+	// Get the count so that we capture all of the possible paths.
+	countreq, _ := http.NewRequest("GET", config.G.ElasticSearch.CountURL, strings.NewReader(string(jsonQuery)))
+	size := "size=" + im.getCount(countreq)
+
+	searchURL := strings.Join([]string{config.G.ElasticSearch.SearchURL, size}, "?")
+	getreq, _ := http.NewRequest("GET", searchURL, strings.NewReader(string(jsonQuery)))
 	r := im.httpRequest(getreq)
 	defer r.Body.Close()
 
