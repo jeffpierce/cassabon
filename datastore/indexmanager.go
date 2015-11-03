@@ -202,11 +202,11 @@ func (im *IndexManager) queryGET(q config.IndexQuery) {
 		for _, hit := range esResp.Hits.Hits {
 			respList = append(respList, hit.Source)
 		}
+
+		jsonResp, _ := json.Marshal(respList)
+
+		resp = config.APIQueryResponse{config.AQS_OK, "", jsonResp}
 	}
-
-	jsonResp, _ := json.Marshal(respList)
-
-	resp = config.APIQueryResponse{config.AQS_OK, "", jsonResp}
 
 	// If the API gave up on us because we took too long, writing to the channel
 	// will cause first a data race, and then a panic (write on closed channel).
