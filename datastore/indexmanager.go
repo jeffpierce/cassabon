@@ -49,11 +49,6 @@ type ERSearchHit struct {
 	Source IndexResponse `json:"_source"`
 }
 
-/* the following turtles-all-the-way-down cluster@#$% of nested structs
-   is here to marshal into JSON below.  Anyone who wants to clean this up,
-   please do.  But thus ugly, ugly, ugly hack works.
-*/
-
 type IndexManager struct {
 	wg *sync.WaitGroup
 }
