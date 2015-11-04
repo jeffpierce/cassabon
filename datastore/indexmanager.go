@@ -119,6 +119,11 @@ func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLea
 
 		// Construct the metric string
 		metricPath := strings.Join(splitPath, ".")
+
+		// Strip % off the end to avoid invalid escape errors.
+		if string(metricPath[len(metricPath)-1]) == "%" {
+			metricPath = metricPath[:len(metricPath)-1]
+		}
 		config.G.Log.System.LogDebug("IndexManager indexing \"%s\"", metricPath)
 
 		pathToIndex := IndexResponse{
