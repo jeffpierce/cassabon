@@ -33,7 +33,7 @@ type runlist struct {
 type MetricResponse struct {
 	From   int64                    `json:"from"`
 	To     int64                    `json:"to"`
-	Step   int                      `json:"step"`
+	Step   int64                    `json:"step"`
 	Series map[string][]interface{} `json:"series"`
 }
 
@@ -496,7 +496,8 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 	}
 
 	// Variables to be returned in the response payload.
-	var step int
+	var step int64
+	var normalFrom int64
 	series := map[string][]interface{}{}
 
 	// Get difference between now and q.From to determine which rollup table to query
@@ -514,11 +515,14 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 				timeDelta, window.Retention, window.Window, window.Table)
 			if timeDelta < window.Retention {
 				table = window.Table
-				step = int(window.Window.Seconds())
+				step = int64(window.Window.Seconds())
 				config.G.Log.System.LogDebug("Using step=%d seconds, table=%s", step, table)
 				break
 			}
 		}
+
+		// Generate normalized from so that items graph correctly.
+		normalFrom = q.From + (step - (q.From % step))
 
 		// Build query for this stat path
 		query := fmt.Sprintf(`SELECT stat,time FROM %s.%s WHERE path=? AND time>=? AND time<=?`,
@@ -531,8 +535,8 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		var mergeCount uint64
 		var mergeValue float64
 		var ts, nextTS time.Time
-		nextTS = nextTimeBoundary(time.Unix(q.From, 0), time.Duration(step)*time.Second)
-		iter := mm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
+		nextTS = nextTimeBoundary(time.Unix(normalFrom, 0), time.Duration(step)*time.Second)
+		iter := mm.dbClient.Query(query, path, time.Unix(normalFrom, 0), time.Unix(q.To, 0)).Iter()
 		for iter.Scan(&stat, &ts) {
 
 			// Fill in any gaps in the series.
@@ -622,7 +626,7 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 	}
 
 	// Build the response payload and wrap it in the channel reply struct.
-	payload := MetricResponse{q.From, q.To, step, series}
+	payload := MetricResponse{normalFrom, q.To, step, series}
 	var resp config.APIQueryResponse
 	if jsonResp, err := json.Marshal(payload); err == nil {
 		resp = config.APIQueryResponse{config.AQS_OK, "", jsonResp}
