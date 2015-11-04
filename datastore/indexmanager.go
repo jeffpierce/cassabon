@@ -97,11 +97,11 @@ func (im *IndexManager) index(path string) {
 }
 
 func (im *IndexManager) httpRequest(req *http.Request) []byte {
-	client := &http.Client{Timeout: time.Duration(5 * time.Second)}
+	client := &http.Client{Timeout: time.Duration(15 * time.Second)}
 	resp, err := client.Do(req)
 
 	if err != nil {
-		logging.Statsd.Client.Inc("indexmgr.es.request.err", 1, 1.0)
+		logging.Statsd.Client.Inc("indexmgr.es.err.httpreq", 1, 1.0)
 		config.G.Log.System.LogError("Received error from ElasticSearch: %v, request: %v", err.Error(), req)
 		return nil
 	}
@@ -114,6 +114,7 @@ func (im *IndexManager) httpRequest(req *http.Request) []byte {
 // processMetricPath recursively indexes the metric path via the ElasticSearch REST API.
 func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLeaf bool) {
 	// Process the metric path one node at a time.  We store metrics in ElasticSearch.
+	retries := 0
 	for pathLen > 0 {
 
 		// Construct the metric string
@@ -151,10 +152,12 @@ func (im *IndexManager) processMetricPath(splitPath []string, pathLen int, isLea
 			_, splitPath = splitPath[len(splitPath)-1], splitPath[:len(splitPath)-1]
 			isLeaf = false
 			pathLen = len(splitPath)
+			retries = 0
 		} else {
 			logging.Statsd.Client.Inc("indexmgr.es.err.pmr.req", 1, 1.0)
-			config.G.Log.System.LogError("Error: processMetricPath's httprequest to ES came back as nil, putreq is %v", putreq)
-			return // Again, let's not fill up ES with junk.
+			retries++
+			config.G.Log.System.LogWarn("processMetricPath's httprequest to ES came back as nil, sending to retry in %d seconds.", retries)
+			time.Sleep(time.Duration(retries) * time.Second)
 		}
 	}
 }
