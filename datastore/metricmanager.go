@@ -33,7 +33,7 @@ type runlist struct {
 type MetricResponse struct {
 	From   int64                    `json:"from"`
 	To     int64                    `json:"to"`
-	Step   int                      `json:"step"`
+	Step   int64                    `json:"step"`
 	Series map[string][]interface{} `json:"series"`
 }
 
@@ -198,6 +198,7 @@ func (mm *MetricManager) writer() {
 		for len(queue) > 0 {
 			qe := queue[0]
 			queue = queue[1:]
+			writeCount := qe.batch.Size()
 			if err := mm.dbClient.ExecuteBatch(qe.batch); err != nil {
 				config.G.Log.System.LogWarn("MetricManager::writer retrying write: %s", err.Error())
 				logging.Statsd.Client.Inc("metricmgr.db.retry", 1, 1.0)
@@ -208,6 +209,7 @@ func (mm *MetricManager) writer() {
 				break // On errors, wait for the next timeout before retrying
 			} else {
 				config.G.Log.System.LogDebug("MetricManager::writer wrote batch. Remaining: %d", len(queue))
+				logging.Statsd.Client.Inc("metricmgr.db.insert", int64(writeCount), 1.0)
 			}
 			// Drain the channel after each write, so it can't fill up.
 			readAllChanneleEntries()
@@ -545,7 +547,8 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 	}
 
 	// Variables to be returned in the response payload.
-	var step int
+	var step int64
+	var normalFrom int64
 	series := map[string][]interface{}{}
 
 	// Get difference between now and q.From to determine which rollup table to query
@@ -563,11 +566,14 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 				timeDelta, window.Retention, window.Window, window.Table)
 			if timeDelta < window.Retention {
 				table = window.Table
-				step = int(window.Window.Seconds())
+				step = int64(window.Window.Seconds())
 				config.G.Log.System.LogDebug("Using step=%d seconds, table=%s", step, table)
 				break
 			}
 		}
+
+		// Generate normalized from so that items graph correctly.
+		normalFrom = q.From + (step - (q.From % step))
 
 		// Build query for this stat path
 		query := fmt.Sprintf(`SELECT stat,time FROM %s.%s WHERE path=? AND time>=? AND time<=?`,
@@ -580,8 +586,8 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		var mergeCount uint64
 		var mergeValue float64
 		var ts, nextTS time.Time
-		nextTS = nextTimeBoundary(time.Unix(q.From, 0), time.Duration(step)*time.Second)
-		iter := mm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
+		nextTS = nextTimeBoundary(time.Unix(normalFrom, 0), time.Duration(step)*time.Second)
+		iter := mm.dbClient.Query(query, path, time.Unix(normalFrom, 0), time.Unix(q.To, 0)).Iter()
 		for iter.Scan(&stat, &ts) {
 
 			// Fill in any gaps in the series.
@@ -670,8 +676,8 @@ func (mm *MetricManager) queryGET(q config.MetricQuery) {
 		series[path] = statList
 	}
 
-	// Build the response payload and send it.
-	payload := MetricResponse{q.From, q.To, step, series}
+	// Build the response payload and wrap it in the channel reply struct.
+	payload := MetricResponse{normalFrom, q.To, step, series}
 	mm.sendResponse(q.Channel, &payload)
 }
 

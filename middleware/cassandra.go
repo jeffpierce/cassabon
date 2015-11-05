@@ -20,6 +20,7 @@ func CassandraSession(chosts []string, cport string, ckeyspace string) (*gocql.S
 	clusterCfg.DiscoverHosts = true
 	clusterCfg.Keyspace = ckeyspace
 	clusterCfg.Timeout = time.Duration(time.Second)
+	clusterCfg.Consistency = gocql.One
 
 	// Create session.
 	return clusterCfg.CreateSession()

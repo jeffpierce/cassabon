@@ -45,9 +45,9 @@ type CassabonConfig struct {
 			DeleteMetric uint
 		}
 	}
-	Cassandra CassandraSettings
-	Redis     RedisSettings
-	Rollups   map[string]RollupSettings // Map of regex and rollups
+	Cassandra     CassandraSettings
+	ElasticSearch ElasticSearchSettings
+	Rollups       map[string]RollupSettings // Map of regex and rollups
 }
 
 // Definition of each rollup
@@ -66,14 +66,13 @@ type CassandraSettings struct {
 	BatchSize  int      // The maximum number of insert statements to use in a batch
 }
 
-// Redis struct for redis connection information
-type RedisSettings struct {
-	Addr        []string // List of addresses in host:port format
-	DB          int64    // Redis DB number for the index.
-	Pwd         string   // Password for Redis.
-	PathKeyname string   // Name of the key under which paths are indexed
-	Sentinel    bool     // True if sentinel, false if standalone.
-	Master      string   // Master config name for sentinel settings.
+// ElasticSearchSettings struct for ES connection information
+type ElasticSearchSettings struct {
+	BaseURL   string // URL/Port of ElasticSearch REST API
+	Index     string // ElasticSearch Index
+	PutURL    string // URL for indexing paths
+	SearchURL string // URL for searching paths.
+	CountURL  string // URL for getting a count for the search path
 }
 
 type StatsdSettings struct {
@@ -122,11 +121,17 @@ func LoadStartupValues() {
 		G.Cassandra.Keyspace = "cassabon"
 	}
 
-	// Copy in the Redis database connection values.
-	G.Redis = rawCassabonConfig.Redis
-	if G.Redis.PathKeyname == "" {
-		G.Redis.PathKeyname = "cassabon"
+	// Copy in the ElasticSearch connection values and generate URLs from BaseURL
+	G.ElasticSearch = rawCassabonConfig.ElasticSearch
+	if G.ElasticSearch.BaseURL == "" {
+		panic("No ElasticSearch URL provided, aborting.")
 	}
+	if G.ElasticSearch.Index == "" {
+		G.ElasticSearch.Index = "cassabon"
+	}
+	G.ElasticSearch.PutURL = strings.Join([]string{G.ElasticSearch.BaseURL, G.ElasticSearch.Index, "path"}, "/")
+	G.ElasticSearch.SearchURL = strings.Join([]string{G.ElasticSearch.PutURL, "_search"}, "/")
+	G.ElasticSearch.CountURL = strings.Join([]string{G.ElasticSearch.SearchURL, "search_type=count"}, "?")
 
 	// Copy in and sanitize the channel lengths.
 	G.Channels.MetricStoreChanLen = rawCassabonConfig.Channels.MetricStoreChanLen
