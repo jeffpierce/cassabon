@@ -47,8 +47,8 @@ func (api *CassabonAPI) run() {
 	api.server.Get("/paths", api.getPathHandler)
 	api.server.Get("/metrics", api.getMetricHandler)
 	api.server.Get("/healthcheck", api.healthHandler)
-	api.server.Delete("/paths/:path", api.deletePathHandler)
-	api.server.Delete("/metrics/:metric", api.deleteMetricHandler)
+	api.server.Delete("/paths", api.deletePathHandler)
+	api.server.Delete("/metrics", api.deleteMetricHandler)
 	api.server.NotFound(api.notFoundHandler)
 
 	api.server.Use(requestLogger)
@@ -127,8 +127,9 @@ func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *htt
 	// Create the channel on which the response will be received.
 	ch := make(chan config.APIQueryResponse)
 
-	// Build the query.
-	q := config.IndexQuery{r.Method, c.URLParams["path"], ch}
+	// Extract the query from the request URI.
+	_ = r.ParseForm()
+	q := config.IndexQuery{r.Method, r.Form.Get("query"), ch}
 	config.G.Log.System.LogDebug("Received paths query: %s %s", q.Method, q.Query)
 
 	// Forward the query.
@@ -179,9 +180,8 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 	ch := make(chan config.APIQueryResponse)
 
 	// Extract the query from the request URI.
-	var metric []string
 	_ = r.ParseForm()
-	metric = append(metric, c.URLParams["metric"])
+	metric := r.Form["path"]
 	from, _ := strconv.Atoi(r.Form.Get("from"))
 	to, _ := strconv.Atoi(r.Form.Get("to"))
 	dryrunText := r.Form.Get("dryrun")
