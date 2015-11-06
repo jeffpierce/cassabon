@@ -495,40 +495,51 @@ func (mm *MetricManager) queryDELETE(q config.MetricQuery) {
 		return
 	}
 
-	type deleteResponse struct {
-		Dryrun  bool              `json:"dryrun"`
+	type deleteResponseDetails struct {
 		Deleted uint64            `json:"approximate_total_deleted"`
-		ByTable map[string]uint64 `json:"approximate_total_bytable"`
+		ByTable map[string]uint64 `json:"approximate_total_by_table"`
 		Errors  map[string]string `json:"delete_errors"`
 	}
-	var delResp deleteResponse = deleteResponse{q.DryRun, 0, make(map[string]uint64), make(map[string]string)}
 
-	// The path could exist in any table, so look in all of them.
-	for _, table := range config.G.RollupTables {
+	type deleteResponse struct {
+		Dryrun bool                             `json:"dryrun"`
+		Paths  map[string]deleteResponseDetails `json:"paths"`
+	}
 
-		// Get counts of the number of rows affected for providing dry-run analysis.
-		delResp.ByTable[table] = 0
-		query := fmt.Sprintf(`SELECT COUNT(*) FROM %s.%s WHERE path=? AND time>=? AND time<=?`,
-			config.G.Cassandra.Keyspace, table)
-		config.G.Log.System.LogDebug("Querying for %q with: %q", q.Query, query)
-		iter := mm.dbClient.Query(query, q.Query[0], time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
-		var count uint64
-		for iter.Scan(&count) {
-			delResp.ByTable[table] = count
-		}
-		delResp.Deleted += delResp.ByTable[table]
+	// Repeat for each path listed in the request.
+	var delResp deleteResponse = deleteResponse{q.DryRun, make(map[string]deleteResponseDetails)}
+	for _, path := range q.Query {
+		var drDetails deleteResponseDetails = deleteResponseDetails{0, make(map[string]uint64), make(map[string]string)}
 
-		// If this isn't a dry run, do the deletions.
-		// Note: Cassandra provides no feedback on how may rows were actually deleted,
-		//       so we return the counts obtained above as an approximation.
-		if !q.DryRun && delResp.ByTable[table] > 0 {
-			query := fmt.Sprintf(`DELETE FROM %s.%s WHERE path=? AND time>=? AND time<=?`,
+		// The path could exist in any table, so look in all of them.
+		for _, table := range config.G.RollupTables {
+
+			// Get counts of the number of rows affected for providing dry-run analysis.
+			drDetails.ByTable[table] = 0
+			query := fmt.Sprintf(`SELECT COUNT(*) FROM %s.%s WHERE path=? AND time>=? AND time<=?`,
 				config.G.Cassandra.Keyspace, table)
-			config.G.Log.System.LogDebug("Deleting %q with: %q", q.Query, query)
-			if err := mm.dbClient.Query(query, q.Query[0], time.Unix(q.From, 0), time.Unix(q.To, 0)).Exec(); err != nil {
-				delResp.Errors[table] = err.Error()
+			config.G.Log.System.LogDebug("Querying for %q with: %q", path, query)
+			iter := mm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Iter()
+			var count uint64
+			for iter.Scan(&count) {
+				drDetails.ByTable[table] = count
+			}
+			drDetails.Deleted += drDetails.ByTable[table]
+
+			// If this isn't a dry run, do the deletions.
+			// Note: Cassandra provides no feedback on how may rows were actually deleted,
+			//       so we return the counts obtained above as an approximation.
+			if !q.DryRun && drDetails.ByTable[table] > 0 {
+				query := fmt.Sprintf(`DELETE FROM %s.%s WHERE path=? AND time>=? AND time<=?`,
+					config.G.Cassandra.Keyspace, table)
+				config.G.Log.System.LogDebug("Deleting %q with: %q", path, query)
+				if err := mm.dbClient.Query(query, path, time.Unix(q.From, 0), time.Unix(q.To, 0)).Exec(); err != nil {
+					drDetails.Errors[table] = err.Error()
+				}
 			}
 		}
+
+		delResp.Paths[path] = drDetails
 	}
 
 	// Send the response payload.
