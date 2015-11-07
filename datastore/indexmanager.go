@@ -199,6 +199,9 @@ func (im *IndexManager) queryGET(q config.IndexQuery) {
 		q.Channel <- config.APIQueryResponse{config.AQS_BADREQUEST, "no query specified", []byte{}}
 		return
 	}
+	// Convert query to form suitable for Elasticsearch regexp search.
+	regexpQuery := strings.Replace(q.Query, ".", "\\.", -1)
+	regexpQuery = strings.Replace(regexpQuery, "*", ".*", -1)
 
 	// Get number of nodes in the path for the ElasticSearch Query
 	pathDepth := len(strings.Split(q.Query, "."))
@@ -207,7 +210,7 @@ func (im *IndexManager) queryGET(q config.IndexQuery) {
 	var respList []IndexResponse
 	var resp config.APIQueryResponse
 
-	// It's turtles all the way down!  This is totalle Vijay's fault.
+	// It's turtles all the way down!  This is totally Vijay's fault.
 	// http://github.com/vijaykramesh -- JP
 	sort := []map[string]map[string]string{
 		{
@@ -220,8 +223,8 @@ func (im *IndexManager) queryGET(q config.IndexQuery) {
 		"bool": map[string][]map[string]map[string]interface{}{
 			"must": []map[string]map[string]interface{}{
 				{
-					"wildcard": map[string]interface{}{
-						"path": q.Query,
+					"regexp": map[string]interface{}{
+						"path": regexpQuery,
 					},
 				},
 				{
