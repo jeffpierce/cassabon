@@ -207,7 +207,7 @@ func (im *IndexManager) queryGET(q config.IndexQuery) {
 	var respList []IndexResponse
 	var resp config.APIQueryResponse
 
-	// It's turtles all the way down!  This is totalle Vijay's fault.
+	// It's turtles all the way down!  This is totally Vijay's fault.
 	// http://github.com/vijaykramesh -- JP
 	sort := []map[string]map[string]string{
 		{
