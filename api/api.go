@@ -47,8 +47,8 @@ func (api *CassabonAPI) run() {
 	api.server.Get("/paths", api.getPathHandler)
 	api.server.Get("/metrics", api.getMetricHandler)
 	api.server.Get("/healthcheck", api.healthHandler)
-	api.server.Delete("/paths/:path", api.deletePathHandler)
-	api.server.Delete("/metrics/:metric", api.deleteMetricHandler)
+	api.server.Delete("/paths", api.deletePathHandler)
+	api.server.Delete("/metrics", api.deleteMetricHandler)
 	api.server.NotFound(api.notFoundHandler)
 
 	api.server.Use(requestLogger)
@@ -127,8 +127,9 @@ func (api *CassabonAPI) deletePathHandler(c web.C, w http.ResponseWriter, r *htt
 	// Create the channel on which the response will be received.
 	ch := make(chan config.APIQueryResponse)
 
-	// Build the query.
-	q := config.IndexQuery{r.Method, c.URLParams["path"], ch}
+	// Extract the query from the request URI.
+	_ = r.ParseForm()
+	q := config.IndexQuery{r.Method, r.Form.Get("query"), ch}
 	config.G.Log.System.LogDebug("Received paths query: %s %s", q.Method, q.Query)
 
 	// Forward the query.
@@ -155,7 +156,7 @@ func (api *CassabonAPI) getMetricHandler(w http.ResponseWriter, r *http.Request)
 	_ = r.ParseForm()
 	from, _ := strconv.Atoi(r.Form.Get("from"))
 	to, _ := strconv.Atoi(r.Form.Get("to"))
-	q := config.MetricQuery{r.Method, r.Form["path"], int64(from), int64(to), ch}
+	q := config.MetricQuery{r.Method, r.Form["path"], int64(from), int64(to), false, ch}
 	config.G.Log.System.LogDebug("Received metrics query: %s %v %d %d", q.Method, q.Query, q.From, q.To)
 
 	// Forward the query.
@@ -178,9 +179,18 @@ func (api *CassabonAPI) deleteMetricHandler(c web.C, w http.ResponseWriter, r *h
 	// Create the channel on which the response will be received.
 	ch := make(chan config.APIQueryResponse)
 
-	// Build the query.
-	q := config.MetricQuery{r.Method, r.Form["path"], 0, 0, ch}
-	config.G.Log.System.LogDebug("Received metrics query: %s %v", q.Method, q.Query)
+	// Extract the query from the request URI.
+	_ = r.ParseForm()
+	metric := r.Form["path"]
+	from, _ := strconv.Atoi(r.Form.Get("from"))
+	to, _ := strconv.Atoi(r.Form.Get("to"))
+	dryrunText := r.Form.Get("dryrun")
+	dryrun := true
+	if strings.ToLower(dryrunText) == "false" || strings.ToLower(dryrunText) == "no" {
+		dryrun = false
+	}
+	q := config.MetricQuery{r.Method, metric, int64(from), int64(to), dryrun, ch}
+	config.G.Log.System.LogDebug("Received metrics query: %s %v %d %d %v", q.Method, q.Query, q.From, q.To, dryrun)
 
 	// Forward the query.
 	select {
