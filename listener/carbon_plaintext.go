@@ -36,7 +36,7 @@ func (cpl *CarbonPlaintextListener) Start(wg, dependentWG *sync.WaitGroup) {
 
 	// After first time through, check whether the peer list changed in any way.
 	var propagatePeerList bool = false
-	if cpl.peerList.IsInitialized() &&
+	if cpl.peerList.IsStarted() &&
 		!cpl.peerList.IsEqual(config.G.Carbon.Listen, config.G.Carbon.Peers) {
 		// Peer list changed; clear out local accumulators, and block until done.
 		config.G.Log.System.LogDebug("peerList::isEqual(): false")

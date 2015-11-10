@@ -27,7 +27,7 @@ func (pl *PeerList) Init() {
 }
 
 // isInitialized indicates whether the structure has ever been updated.
-func (pl *PeerList) IsInitialized() bool {
+func (pl *PeerList) IsStarted() bool {
 	return pl.hostPort != ""
 }
 
