@@ -5,7 +5,7 @@ import (
 	"net"
 )
 
-func stats() {
+func main() {
 
 	addr := net.UDPAddr{Port: 8125, IP: net.ParseIP("127.0.0.1")}
 	conn, err := net.ListenUDP("udp", &addr)
