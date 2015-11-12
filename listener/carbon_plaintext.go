@@ -109,11 +109,12 @@ func (cpl *CarbonPlaintextListener) getTCPData(conn net.Conn) {
 
 	// Carbon metrics are terminated by newlines. Read line-by-line, and dispatch.
 	defer conn.Close()
+	defer config.G.Log.System.LogDebug("CarbonTCP connection closed")
+	config.G.Log.System.LogDebug("CarbonTCP connection accepted")
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		cpl.metricHandler(scanner.Text())
 	}
-	config.G.Log.System.LogDebug("Returning from getTCPData")
 }
 
 // carbonUDP listens for incoming Carbon UDP traffic and dispatches it.
