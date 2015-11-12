@@ -4,9 +4,9 @@ package listener
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"net"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,15 +17,13 @@ import (
 )
 
 type CarbonPlaintextListener struct {
-	wg              *sync.WaitGroup
-	peerMsg         *regexp.Regexp
-	peerCmdPeerlist *regexp.Regexp
-	peerList        PeerList
+	wg       *sync.WaitGroup
+	peerMsg  *regexp.Regexp
+	peerList PeerList
 }
 
 func (cpl *CarbonPlaintextListener) Init() {
-	cpl.peerMsg = regexp.MustCompile("^{{([a-z]+)=.*}}$")      // "{{cmd=<command-specific-string>}}"
-	cpl.peerCmdPeerlist = regexp.MustCompile("[0-9.]+:[0-9]+") // 127.0.0.1:2003,127.0.0.1:2013, ...
+	cpl.peerMsg = regexp.MustCompile("^<<([a-z]+)=(.*)>>$") // "<<cmd=command-specific-string>>"
 	cpl.peerList = PeerList{}
 	cpl.peerList.Init()
 }
@@ -202,13 +200,13 @@ func (cpl *CarbonPlaintextListener) getUDPData(buf string) {
 	config.G.Log.System.LogDebug("Returning from getUDPData")
 }
 
-// metricHandler reads, parses, and sends on a Carbon data packet.
+// metricHandler reads, parses, and forwards a Carbon data packet.
 func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 
 	// Inspect input for a message from a Cassabon peer.
-	if cmd := cpl.peerMsg.FindStringSubmatch(line); len(cmd) > 1 {
+	if cmd := cpl.peerMsg.FindStringSubmatch(line); len(cmd) > 2 {
 		// Act on the command, and return.
-		cpl.processPeerCommand(cmd[1], line)
+		cpl.processPeerCommand(cmd[1], cmd[2])
 		return
 	}
 
@@ -253,11 +251,14 @@ func (cpl *CarbonPlaintextListener) metricHandler(line string) {
 }
 
 // processPeerCommand acts on commands from Cassabon peers.
-func (cpl *CarbonPlaintextListener) processPeerCommand(cmd, line string) {
-	switch cmd {
+func (cpl *CarbonPlaintextListener) processPeerCommand(cmdName, cmd string) {
+	switch cmdName {
 	case "peerlist":
-		peers := cpl.peerCmdPeerlist.FindAllString(line, -1)
-		sort.Strings(peers)
+		var peers map[string]string
+		if err := json.Unmarshal([]byte(cmd), &peers); err != nil {
+			config.G.Log.System.LogWarn("Invalid peer command received: %s", err.Error())
+			// Validation below will further describe the error.
+		}
 		config.G.Log.System.LogInfo("Command: peerlist=%q", peers)
 		if err := config.ValidatePeerList(config.G.Carbon.Listen, peers); err != nil {
 			config.G.Log.System.LogWarn("peerlist error: %s", err.Error())
@@ -271,7 +272,7 @@ func (cpl *CarbonPlaintextListener) processPeerCommand(cmd, line string) {
 			}
 		}
 	default:
-		config.G.Log.System.LogWarn("Invalid peer command received: %q", line)
+		config.G.Log.System.LogWarn("Invalid peer command received: %q", cmd)
 		logging.Statsd.Client.Inc("carbon.err.peer.cmd", 1, 1.0)
 	}
 }

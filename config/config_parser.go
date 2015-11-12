@@ -33,7 +33,7 @@ type CassabonConfig struct {
 			TCPTimeout int
 			UDPTimeout int
 		}
-		Peers []string // All servers in the Cassabon array, as "ip:port"
+		Peers map[string]string // All servers in the Cassabon array, as "ip:port"
 	}
 	API struct {
 		Listen          string // HTTP API listens on this address:port
@@ -165,8 +165,11 @@ func LoadStartupValues() {
 }
 
 // ValidatePeerList ensures addresses are valid, and that the local address is in the peer list.
-func ValidatePeerList(localHostPort string, peers []string) error {
+func ValidatePeerList(localHostPort string, peers map[string]string) error {
 
+	if len(peers) < 1 {
+		return fmt.Errorf("No peers in peer list")
+	}
 	for _, v := range peers {
 		if _, err := net.ResolveTCPAddr("tcp4", v); err != nil {
 			return fmt.Errorf("Invalid host:port \"%s\" in peer list: %s", v, err.Error())
@@ -215,10 +218,6 @@ func LoadRefreshableValues() {
 	G.Carbon.Listen = rawCassabonConfig.Carbon.Listen
 	G.Carbon.Protocol = rawCassabonConfig.Carbon.Protocol
 	G.Carbon.Peers = rawCassabonConfig.Carbon.Peers
-
-	// Ensure a canonical order for Cassabon peers, as we will allocate
-	// metrics paths to a peer by indexing into this array.
-	sort.Strings(G.Carbon.Peers)
 
 	// Ensure addresses are valid, and that the local address:port is in the peer list.
 	if err := ValidatePeerList(G.Carbon.Listen, G.Carbon.Peers); err != nil {
