@@ -91,7 +91,12 @@ func (cpl *CarbonPlaintextListener) carbonTCP(hostPort string) {
 			// On receipt of a connection, spawn a goroutine to handle it.
 			tcpListener.SetDeadline(time.Now().Add(time.Duration(config.G.Carbon.Parameters.TCPTimeout) * time.Second))
 			if conn, err := tcpListener.Accept(); err == nil {
-				go cpl.getTCPData(conn)
+				select {
+				case <-config.G.OnReload1:
+					conn.Close() // Shutdown occurred while waiting, refuse this connection
+				default:
+					go cpl.getTCPData(conn)
+				}
 			} else {
 				if err.(net.Error).Timeout() {
 					config.G.Log.System.LogDebug("CarbonTCP Accept() timed out")
@@ -111,9 +116,16 @@ func (cpl *CarbonPlaintextListener) getTCPData(conn net.Conn) {
 	defer conn.Close()
 	defer config.G.Log.System.LogDebug("CarbonTCP connection closed")
 	config.G.Log.System.LogDebug("CarbonTCP connection accepted")
+	conn.SetDeadline(time.Now().Add(time.Second))
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		cpl.metricHandler(scanner.Text())
+		select {
+		case <-config.G.OnReload1:
+			return
+		default:
+			conn.SetDeadline(time.Now().Add(time.Second))
+		}
 	}
 }
 
@@ -198,7 +210,6 @@ func (cpl *CarbonPlaintextListener) getUDPData(buf string) {
 	for scanner.Scan() {
 		cpl.metricHandler(scanner.Text())
 	}
-	config.G.Log.System.LogDebug("Returning from getUDPData")
 }
 
 // metricHandler reads, parses, and forwards a Carbon data packet.
