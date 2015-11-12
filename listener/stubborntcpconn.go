@@ -65,6 +65,9 @@ func (sc *StubbornTCPConn) internalOpen() error {
 	var err error
 	if sc.conn, err = net.DialTCP("tcp4", nil, sc.addr); err == nil {
 		sc.isOpen = true
+		if !sc.openFailed {
+			config.G.Log.System.LogWarn("Peer connection to %s established", sc.hostPort)
+		}
 		sc.openFailed = false
 	} else {
 		if !sc.openFailed {
