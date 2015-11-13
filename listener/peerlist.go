@@ -59,11 +59,13 @@ func (pl *PeerList) Start(wg *sync.WaitGroup, hostPort string, peersMap map[stri
 				break
 			}
 		}
-		if !found && existing != pl.hostPort {
-			pl.conns[existing].Close()
-			delete(pl.conns, existing)
-		} else {
-			config.G.Log.System.LogInfo("Keeping peer connection to %s", existing)
+		if existing != pl.hostPort {
+			if !found {
+				pl.conns[existing].Close()
+				delete(pl.conns, existing)
+			} else {
+				config.G.Log.System.LogInfo("Keeping peer connection to %s", existing)
+			}
 		}
 	}
 
