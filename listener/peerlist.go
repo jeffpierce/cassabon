@@ -61,6 +61,8 @@ func (pl *PeerList) Start(wg *sync.WaitGroup, hostPort string, peersMap map[stri
 		if !found && existing != pl.hostPort {
 			pl.conns[existing].Close()
 			delete(pl.conns, existing)
+		} else {
+			config.G.Log.System.LogInfo("Retaining peer connection to %s", existing)
 		}
 	}
 
@@ -126,6 +128,7 @@ func (pl *PeerList) PropagatePeerList() {
 	// Send the command to each peer.
 	for i, v := range pl.peers {
 		if v != pl.hostPort {
+			config.G.Log.System.LogInfo("Sending peer list to %s", v)
 			pl.target <- indexedLine{i, cmd}
 		}
 	}
