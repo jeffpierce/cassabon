@@ -129,6 +129,8 @@ func (l *FileLogger) SetLogLevel(logLevel Severity) {
 
 // GetLogLevel returns the current logging level threshold.
 func (l *FileLogger) GetLogLevel() Severity {
+	l.m.RLock()
+	defer l.m.RUnlock()
 	return l.logLevel
 }
 
