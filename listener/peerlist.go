@@ -63,7 +63,7 @@ func (pl *PeerList) Start(wg *sync.WaitGroup, hostPort string, peersMap map[stri
 			pl.conns[existing].Close()
 			delete(pl.conns, existing)
 		} else {
-			config.G.Log.System.LogInfo("Retaining peer connection to %s", existing)
+			config.G.Log.System.LogInfo("Keeping peer connection to %s", existing)
 		}
 	}
 
