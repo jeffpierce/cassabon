@@ -17,12 +17,16 @@ import (
 )
 
 type CarbonPlaintextListener struct {
+	listen   string
+	peers    map[string]string
 	wg       *sync.WaitGroup
 	peerMsg  *regexp.Regexp
 	peerList PeerList
 }
 
 func (cpl *CarbonPlaintextListener) Init() {
+	cpl.listen = config.G.Carbon.Listen
+	cpl.peers = config.G.Carbon.Peers
 	cpl.peerMsg = regexp.MustCompile("^<<([a-z]+)=(.*)>>$") // "<<cmd=command-specific-string>>"
 	cpl.peerList = PeerList{}
 	cpl.peerList.Init()
@@ -33,35 +37,30 @@ func (cpl *CarbonPlaintextListener) Start(wg, dependentWG *sync.WaitGroup) {
 	cpl.wg = wg
 
 	// After first time through, check whether the peer list changed in any way.
-	var propagatePeerList bool = false
 	if cpl.peerList.IsStarted() &&
-		!cpl.peerList.IsEqual(config.G.Carbon.Listen, config.G.Carbon.Peers) {
+		!cpl.peerList.IsEqual(cpl.listen, cpl.peers) {
 		// Peer list changed; clear out local accumulators, and block until done.
 		config.G.Log.System.LogDebug("peerList::isEqual(): false")
 		config.G.OnPeerChangeReq <- struct{}{} // Signal the data store
 		<-config.G.OnPeerChangeRsp             // Wait for data store to signal it is done
-		propagatePeerList = true
 	}
 
 	// Start the Cassabon peer forwarder goroutine.
-	cpl.peerList.Start(dependentWG, config.G.Carbon.Listen, config.G.Carbon.Peers)
-	if propagatePeerList {
-		// This must be done AFTER Start() to avoid deadlock.
-		cpl.peerList.PropagatePeerList()
-	}
+	cpl.peerList.Start(dependentWG, cpl.listen, cpl.peers)
+	cpl.peerList.PropagatePeerList()
 
 	// Kick off goroutines to listen for TCP and/or UDP traffic as specified.
 	switch config.G.Carbon.Protocol {
 	case "tcp":
 		cpl.wg.Add(1)
-		go cpl.carbonTCP(config.G.Carbon.Listen)
+		go cpl.carbonTCP(cpl.listen)
 	case "udp":
 		cpl.wg.Add(1)
-		go cpl.carbonUDP(config.G.Carbon.Listen)
+		go cpl.carbonUDP(cpl.listen)
 	default:
 		cpl.wg.Add(2)
-		go cpl.carbonTCP(config.G.Carbon.Listen)
-		go cpl.carbonUDP(config.G.Carbon.Listen)
+		go cpl.carbonTCP(cpl.listen)
+		go cpl.carbonUDP(cpl.listen)
 	}
 }
 
@@ -116,16 +115,9 @@ func (cpl *CarbonPlaintextListener) getTCPData(conn net.Conn) {
 	defer conn.Close()
 	defer config.G.Log.System.LogDebug("CarbonTCP connection closed")
 	config.G.Log.System.LogDebug("CarbonTCP connection accepted")
-	conn.SetDeadline(time.Now().Add(time.Second))
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		cpl.metricHandler(scanner.Text())
-		select {
-		case <-config.G.OnReload1:
-			return
-		default:
-			conn.SetDeadline(time.Now().Add(time.Second))
-		}
 	}
 }
 
@@ -272,14 +264,14 @@ func (cpl *CarbonPlaintextListener) processPeerCommand(cmdName, cmd string) {
 			// Validation below will further describe the error.
 		}
 		config.G.Log.System.LogInfo("Command: peerlist=%q", peers)
-		if err := config.ValidatePeerList(config.G.Carbon.Listen, peers); err != nil {
+		if err := config.ValidatePeerList(cpl.listen, peers); err != nil {
 			config.G.Log.System.LogWarn("peerlist error: %s", err.Error())
 			logging.Statsd.Client.Inc("carbon.err.peer.validate", 1, 1.0)
 		} else {
 			// Is this peer list different from the one in current use?
-			if !cpl.peerList.IsEqual(config.G.Carbon.Listen, peers) {
+			if !cpl.peerList.IsEqual(cpl.listen, peers) {
 				config.G.Log.System.LogInfo("Peer list changed, flushing and reloading")
-				config.G.Carbon.Peers = peers
+				cpl.peers = peers
 				config.G.OnPeerChange <- struct{}{}
 			}
 		}
