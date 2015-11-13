@@ -26,7 +26,11 @@ type PeerList struct {
 }
 
 func (pl *PeerList) Init() {
+
 	pl.conns = make(map[string]*StubbornTCPConn, 0)
+
+	// Create the channel on which stats to forward are received.
+	pl.target = make(chan indexedLine, 1)
 }
 
 // IsStarted indicates whether the structure has ever been updated.
@@ -44,9 +48,6 @@ func (pl *PeerList) Start(wg *sync.WaitGroup, hostPort string, peersMap map[stri
 	pl.wg = wg
 	pl.hostPort = hostPort
 	pl.peersMap = peersMap
-
-	// Create the channel on which stats to forward are received.
-	pl.target = make(chan indexedLine, 1)
 
 	// Dispose of any peer connections that are obsolete.
 	peers := sortedMapToArray(pl.peersMap)
@@ -136,8 +137,6 @@ func (pl *PeerList) PropagatePeerList() {
 
 // run listens for stat lines on a channel and sends them to the appropriate Cassabon peer.
 func (pl *PeerList) run() {
-
-	defer close(pl.target)
 
 	for {
 		select {
