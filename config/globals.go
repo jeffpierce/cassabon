@@ -122,7 +122,7 @@ type Globals struct {
 			TCPTimeout int
 			UDPTimeout int
 		}
-		Peers []string // All servers in the Cassabon array, as "ip:port"
+		Peers map[string]string // All servers in the Cassabon array, as "ip:port"
 	}
 
 	// Configuration of the API.

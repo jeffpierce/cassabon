@@ -21,7 +21,9 @@ func (sc *StubbornTCPConn) Open(hostPort string) {
 	sc.hostPort = hostPort
 	sc.addr, _ = net.ResolveTCPAddr("tcp4", sc.hostPort)
 	config.G.Log.System.LogInfo("Opening peer connection to %s", sc.hostPort)
-	sc.internalOpen()
+	if err := sc.internalOpen(); err == nil {
+		config.G.Log.System.LogInfo("Peer connection to %s established", sc.hostPort)
+	}
 }
 
 // Close ensures that the underlying TCP connection is in the closed state.

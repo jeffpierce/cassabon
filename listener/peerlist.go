@@ -1,6 +1,8 @@
 package listener
 
 import (
+	"encoding/json"
+	"sort"
 	"sync"
 
 	"github.com/jeffpierce/cassabon/config"
@@ -15,35 +17,40 @@ type indexedLine struct {
 // PeerList contains an ordered list of Cassabon peers.
 type PeerList struct {
 	wg       *sync.WaitGroup
-	target   chan indexedLine // Channel for forwarding a stat line to a Cassabon peer
-	hostPort string           // Host:port on which the local server is listening
-	peers    []string         // Host:port information for all Cassabon peers (inclusive)
+	target   chan indexedLine  // Channel for forwarding a stat line to a Cassabon peer
+	hostPort string            // Host:port on which the local server is listening
+	peersMap map[string]string // Peer list as stored in the configuration
+	peers    []string          // Host:port information for all Cassabon peers (inclusive)
 	conns    map[string]*StubbornTCPConn
 	self     sync.RWMutex
 }
 
 func (pl *PeerList) Init() {
+
 	pl.conns = make(map[string]*StubbornTCPConn, 0)
+
+	// Create the channel on which stats to forward are received.
+	pl.target = make(chan indexedLine, 1)
 }
 
-// isInitialized indicates whether the structure has ever been updated.
-func (pl *PeerList) IsInitialized() bool {
+// IsStarted indicates whether the structure has ever been updated.
+func (pl *PeerList) IsStarted() bool {
 	return pl.hostPort != ""
 }
 
-// start records the current peer list and starts the forwarder goroutine.
-func (pl *PeerList) Start(wg *sync.WaitGroup, hostPort string, peers []string) {
+// Start records the current peer list and starts the forwarder goroutine.
+func (pl *PeerList) Start(wg *sync.WaitGroup, hostPort string, peersMap map[string]string) {
 
 	// Synchronize access by other goroutines.
 	pl.self.Lock()
 	defer pl.self.Unlock()
 
 	pl.wg = wg
-
-	// Create the channel on which stats to forward are received.
-	pl.target = make(chan indexedLine, 1)
+	pl.hostPort = hostPort
+	pl.peersMap = peersMap
 
 	// Dispose of any peer connections that are obsolete.
+	peers := sortedMapToArray(pl.peersMap)
 	for _, existing := range pl.peers {
 		found := false
 		for _, incoming := range peers {
@@ -52,14 +59,17 @@ func (pl *PeerList) Start(wg *sync.WaitGroup, hostPort string, peers []string) {
 				break
 			}
 		}
-		if !found && existing != pl.hostPort {
-			pl.conns[existing].Close()
-			delete(pl.conns, existing)
+		if existing != pl.hostPort {
+			if !found {
+				pl.conns[existing].Close()
+				delete(pl.conns, existing)
+			} else {
+				config.G.Log.System.LogInfo("Keeping peer connection to %s", existing)
+			}
 		}
 	}
 
 	// Record the current set of peers.
-	pl.hostPort = hostPort
 	pl.peers = make([]string, len(peers))
 	for i, v := range peers {
 		pl.peers[i] = v
@@ -75,8 +85,8 @@ func (pl *PeerList) Start(wg *sync.WaitGroup, hostPort string, peers []string) {
 	go pl.run()
 }
 
-// isEqual indicates whether the given new configuration is equal to the current.
-func (pl *PeerList) IsEqual(hostPort string, peers []string) bool {
+// IsEqual indicates whether the given new configuration is equal to the current.
+func (pl *PeerList) IsEqual(hostPort string, peersMap map[string]string) bool {
 
 	// Synchronize access by other goroutines.
 	pl.self.RLock()
@@ -85,6 +95,8 @@ func (pl *PeerList) IsEqual(hostPort string, peers []string) bool {
 	if pl.hostPort != hostPort {
 		return false
 	}
+
+	peers := sortedMapToArray(peersMap)
 	if len(pl.peers) != len(peers) {
 		return false
 	}
@@ -97,7 +109,7 @@ func (pl *PeerList) IsEqual(hostPort string, peers []string) bool {
 	return true
 }
 
-// ownerOf determines which host owns a particular stats path.
+// OwnerOf determines which host owns a particular stats path.
 func (pl *PeerList) OwnerOf(statPath string) (int, bool) {
 	peerIndex := int(pearson.Hash8(statPath)) % len(pl.peers)
 	if pl.hostPort == pl.peers[peerIndex] {
@@ -110,21 +122,16 @@ func (pl *PeerList) OwnerOf(statPath string) (int, bool) {
 // PropagatePeerList sends the current peer list to all known peers.
 func (pl *PeerList) PropagatePeerList() {
 
-	// Build a comma-separated list of peers.
-	var cmd string
-	for _, v := range pl.peers {
-		if cmd != "" {
-			cmd = cmd + ","
-		}
-		cmd = cmd + v
-	}
-
 	// Build the command to be sent.
-	cmd = "{{peerlist=" + cmd + "}}"
+	var cmd string
+	var buf []byte
+	buf, _ = json.Marshal(pl.peersMap)
+	cmd = "<<peerlist=" + string(buf) + ">>"
 
 	// Send the command to each peer.
 	for i, v := range pl.peers {
 		if v != pl.hostPort {
+			config.G.Log.System.LogInfo("Sending peer list to %s", v)
 			pl.target <- indexedLine{i, cmd}
 		}
 	}
@@ -132,8 +139,6 @@ func (pl *PeerList) PropagatePeerList() {
 
 // run listens for stat lines on a channel and sends them to the appropriate Cassabon peer.
 func (pl *PeerList) run() {
-
-	defer close(pl.target)
 
 	for {
 		select {
@@ -147,4 +152,17 @@ func (pl *PeerList) run() {
 			}
 		}
 	}
+}
+
+// sortedMapToArray converts a map to an array of its values, ordered by key.
+func sortedMapToArray(m map[string]string) []string {
+	var a, t []string
+	for k, _ := range m {
+		t = append(t, k)
+	}
+	sort.Strings(t)
+	for _, v := range t {
+		a = append(a, m[v])
+	}
+	return a
 }
