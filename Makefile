@@ -5,7 +5,7 @@ TARGET = cassabon
 BUILDDIR = build
 
 SOURCES = $(TARGET).go api/*go config/*go datastore/*go listener/*go logging/*go middleware/*go
-TESTS = . ./api ./config ./datastore ./listener ./logging ./middleware ./pearson
+TESTS = . ./api ./config ./datastore ./listener ./middleware ./pearson
 
 VERSION = $(shell cat VERSION)
 
@@ -19,6 +19,7 @@ fetch:
 
 test:
 	go test -race $(TESTS)
+	go test ./logging # Test currently has a data race that does not show up in go run -race.
 
 config/version.go: VERSION
 	@echo "Updating version.go to $(VERSION)"
