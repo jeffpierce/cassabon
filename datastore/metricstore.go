@@ -36,6 +36,8 @@ func (mm *MetricManager) applyMethod(method config.RollupMethod, currentVal, new
 		}
 	case config.SUM:
 		currentVal = currentVal + newVal
+	case config.LAST:
+		currentVal = newVal
 	}
 	return currentVal
 }

@@ -55,6 +55,7 @@ const (
 	MAX
 	MIN
 	SUM
+	LAST
 )
 
 // The string that represents the catchall rollup.
