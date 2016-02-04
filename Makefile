@@ -17,9 +17,10 @@ clean:
 fetch:
 	go get -t -d -v ./...
 
+# Logging currently shows a data race that only shows in testing, not in build or run.
 test:
 	go test -race $(TESTS)
-	go test ./logging # Test currently has a data race that does not show up in go run -race.
+	go test ./logging
 
 config/version.go: VERSION
 	@echo "Updating version.go to $(VERSION)"
