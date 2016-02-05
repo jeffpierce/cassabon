@@ -122,6 +122,9 @@ func main() {
 				if !pc.Emit("foo.bar.baz.sum %f %f\n", counter, ts) {
 					break
 				}
+				if !pc.Emit("foo.bar.baz.last %f %f\n", counter, ts) {
+					break
+				}
 
 				// Provide a true count of the number of stats emitted.
 				if !pc.Emit("foo.bar.baz.count %f %f\n", 5.0, ts) {

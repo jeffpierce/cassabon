@@ -299,6 +299,8 @@ func LoadRollups() bool {
 			method = MIN
 		case "sum":
 			method = SUM
+		case "last":
+			method = LAST
 		default:
 			G.Log.System.LogWarn("Invalid aggregation method for \"%s\": %s", expression, v.Aggregation)
 			configIsClean = false
