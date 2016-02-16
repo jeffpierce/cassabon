@@ -4,6 +4,8 @@
 
 Carbon daemon using Cassandra as the backend, implemented in Go.
 
+[GoDoc](https://godoc.org/github.com/jeffpierce/cassabon)
+
 ## What does cassabon do?
 
 Cassabon receives your carbon metrics and stores them in Cassandra (hence the name, Cassabon), which makes it a lot easier to scale your time-series metrics infrastructure since you no longer need to re-hash a graphite ring to add more capacity!  If you need more stats listeners, bring up more Cassabon instances.  If you need more stats storage, bring up more Cassandra instances.  That simple!
@@ -15,6 +17,8 @@ It also acts as an API for Graphite or graphite-api (using the Cyanite reader) t
 * Build it.
 * Fill out the cassabon.yaml configuration file by giving it the addresses of the Elasticsearch and Cassandra servers you're using.
 * Start it up!
+
+...okay, it's a little more in depth than that. Documentation can be found in the project wiki, although it's currently a work in progress.
 
 ## Can I contribute to Cassabon?
 
@@ -34,4 +38,4 @@ Cassabon requires Elasticsearch and Cassandra to function.  It's tested with Ela
 
 ## Credits
 
-A big shoutout to Change.org, who sponsored the development of this software, and to @pyr, author of Cyanite project, as Cassabon wouldn't be a thing without him having the idea to use Cassandra as a storage backend for carbon-style time series data.
+A big shoutout to [Change.org](https://change.org), who sponsored the development of this software, and to [@pyr](https://github.com/pyr), author of the [Cyanite](https://github.com/pyr/cyanite) project, as Cassabon wouldn't be a thing without him having the idea to use Cassandra as a storage backend for carbon-style time series data.
