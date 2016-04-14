@@ -9,9 +9,9 @@ import (
 
 	"github.com/gocql/gocql"
 
-	"github.com/jeffpierce/cassabon/config"
-	"github.com/jeffpierce/cassabon/logging"
-	"github.com/jeffpierce/cassabon/middleware"
+	"github.com/change/cassabon/config"
+	"github.com/change/cassabon/logging"
+	"github.com/change/cassabon/middleware"
 )
 
 // rollup contains the accumulated metrics data for a path.

@@ -5,8 +5,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/jeffpierce/cassabon/config"
-	"github.com/jeffpierce/cassabon/pearson"
+	"github.com/change/cassabon/config"
+	"github.com/change/cassabon/pearson"
 )
 
 type indexedLine struct {

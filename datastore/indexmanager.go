@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jeffpierce/cassabon/config"
-	"github.com/jeffpierce/cassabon/logging"
+	"github.com/change/cassabon/config"
+	"github.com/change/cassabon/logging"
 )
 
 // IndexResponse defines the individual elements returned as an array by "GET /paths".

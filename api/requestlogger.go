@@ -8,8 +8,8 @@ import (
 	"github.com/zenazn/goji/web"
 	"github.com/zenazn/goji/web/mutil"
 
-	"github.com/jeffpierce/cassabon/config"
-	"github.com/jeffpierce/cassabon/logging"
+	"github.com/change/cassabon/config"
+	"github.com/change/cassabon/logging"
 )
 
 // requestLogger handler emits access and trace log entries.

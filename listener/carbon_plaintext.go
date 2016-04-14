@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jeffpierce/cassabon/config"
-	"github.com/jeffpierce/cassabon/logging"
+	"github.com/change/cassabon/config"
+	"github.com/change/cassabon/logging"
 )
 
 type CarbonPlaintextListener struct {

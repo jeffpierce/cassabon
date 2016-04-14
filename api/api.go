@@ -14,8 +14,8 @@ import (
 	"github.com/zenazn/goji/graceful"
 	"github.com/zenazn/goji/web"
 
-	"github.com/jeffpierce/cassabon/config"
-	"github.com/jeffpierce/cassabon/logging"
+	"github.com/change/cassabon/config"
+	"github.com/change/cassabon/logging"
 )
 
 type CassabonAPI struct {
@@ -90,7 +90,7 @@ func (api *CassabonAPI) rootHandler(w http.ResponseWriter, r *http.Request) {
 		Version string `json:"version"`
 	}{}
 	resp.Message = "Cassabon.  You know, for stats!"
-	resp.Github = "https://github.com/jeffpierce/cassabon"
+	resp.Github = "https://github.com/change/cassabon"
 	resp.Version = config.Version
 	jsonText, _ := json.Marshal(resp)
 	w.Write(jsonText)

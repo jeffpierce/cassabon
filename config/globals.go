@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/jeffpierce/cassabon/logging"
+	"github.com/change/cassabon/logging"
 )
 
 // CarbonMetric is the canonical representation of Carbon data.

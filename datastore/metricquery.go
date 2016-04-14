@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeffpierce/cassabon/config"
-	"github.com/jeffpierce/cassabon/logging"
+	"github.com/change/cassabon/config"
+	"github.com/change/cassabon/logging"
 )
 
 // query returns the data matched by the supplied query.

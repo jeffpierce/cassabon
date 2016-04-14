@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeffpierce/cassabon/config"
-	"github.com/jeffpierce/cassabon/logging"
+	"github.com/change/cassabon/config"
+	"github.com/change/cassabon/logging"
 )
 
 func TestCarbonSocket(t *testing.T) {
