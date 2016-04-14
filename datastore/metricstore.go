@@ -3,8 +3,8 @@ package datastore
 import (
 	"time"
 
-	"github.com/jeffpierce/cassabon/config"
-	"github.com/jeffpierce/cassabon/logging"
+	"github.com/change/cassabon/config"
+	"github.com/change/cassabon/logging"
 )
 
 // getExpression returns the first expression that matches the supplied path.

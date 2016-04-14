@@ -1,10 +1,11 @@
 # cassabon
+The upstream repo for Change Cassabon is [cassabon][https://github.com/jeffpierce/cassabon/], which is an open source project supported by Change.org
 
-[![Circle CI](https://circleci.com/gh/jeffpierce/cassabon/tree/master.svg?style=svg)](https://circleci.com/gh/jeffpierce/cassabon/tree/master)
+[![Circle CI](https://circleci.com/gh/change/cassabon/tree/master.svg?style=svg)](https://circleci.com/gh/change/cassabon/tree/master)
 
 Carbon daemon using Cassandra as the backend, implemented in Go.
 
-[GoDoc](https://godoc.org/github.com/jeffpierce/cassabon)
+[GoDoc](https://godoc.org/github.com/change/cassabon)
 
 ## What does cassabon do?
 

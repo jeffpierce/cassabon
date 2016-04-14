@@ -8,11 +8,11 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/jeffpierce/cassabon/api"
-	"github.com/jeffpierce/cassabon/config"
-	"github.com/jeffpierce/cassabon/datastore"
-	"github.com/jeffpierce/cassabon/listener"
-	"github.com/jeffpierce/cassabon/logging"
+	"github.com/change/cassabon/api"
+	"github.com/change/cassabon/config"
+	"github.com/change/cassabon/datastore"
+	"github.com/change/cassabon/listener"
+	"github.com/change/cassabon/logging"
 )
 
 func main() {

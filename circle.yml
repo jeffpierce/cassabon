@@ -1,8 +1,8 @@
 dependencies:
   override:
     - make fetch
-    - rm -rf ~/.go_workspace/src/github.com/jeffpierce/cassabon
-    - ln -sf ~/cassabon ~/.go_workspace/src/github.com/jeffpierce/cassabon
+    - rm -rf ~/.go_workspace/src/github.com/change/cassabon
+    - ln -sf ~/cassabon ~/.go_workspace/src/github.com/change/cassabon
     - make clean build
 
 test:

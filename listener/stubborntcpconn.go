@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/jeffpierce/cassabon/config"
+	"github.com/change/cassabon/config"
 )
 
 // StubbornTCPConn wraps a TCP client connection to persistently retry dropped connections.
