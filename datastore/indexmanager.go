@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/otium/queue"
+
 	"github.com/jeffpierce/cassabon/config"
 	"github.com/jeffpierce/cassabon/logging"
-
-	"github.com/otium/queue"
 )
 
 // IndexResponse defines the individual elements returned as an array by "GET /paths".
