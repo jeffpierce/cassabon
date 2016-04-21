@@ -12,6 +12,8 @@ import (
 
 	"github.com/jeffpierce/cassabon/config"
 	"github.com/jeffpierce/cassabon/logging"
+
+	"github.com/otium/queue"
 )
 
 // IndexResponse defines the individual elements returned as an array by "GET /paths".
@@ -56,7 +58,8 @@ type ERQuery struct {
 }
 
 type IndexManager struct {
-	wg *sync.WaitGroup
+	wg         *sync.WaitGroup
+	IndexQueue *queue.Queue
 }
 
 func (im *IndexManager) Init(bootstrap bool) {
@@ -64,6 +67,12 @@ func (im *IndexManager) Init(bootstrap bool) {
 	if bootstrap {
 		im.initMapping()
 	}
+
+	// Initialize index worker queue.
+	im.IndexQueue = queue.NewQueue(func(metricPath interface{}) {
+		path, _ := metricPath.(string)
+		im.index(path)
+	}, 100)
 }
 
 func (im *IndexManager) Start(wg *sync.WaitGroup) {
@@ -84,7 +93,7 @@ func (im *IndexManager) run() {
 			im.wg.Done()
 			return
 		case metric := <-config.G.Channels.IndexStore:
-			go im.index(metric.Path)
+			im.IndexQueue.Push(metric.Path)
 		case query := <-config.G.Channels.IndexRequest:
 			go im.query(query)
 		}
@@ -108,7 +117,7 @@ func (im *IndexManager) initMapping() {
 						"type": "string",
 					},
 					"leaf": map[string]string{
-						"type": "bool",
+						"type": "boolean",
 					},
 				},
 			},
@@ -118,8 +127,10 @@ func (im *IndexManager) initMapping() {
 	jsonMap, _ := json.Marshal(mapping)
 	config.G.Log.System.LogDebug("%s", string(jsonMap))
 
-	putreq, _ := http.NewRequest("PUT", config.G.ElasticSearch.PutURL, bytes.NewBuffer(jsonMap))
+	putreq, _ := http.NewRequest("PUT", config.G.ElasticSearch.MapURL, bytes.NewBuffer(jsonMap))
 	r := im.httpRequest(putreq)
+
+	config.G.Log.System.LogDebug("%v", string(r))
 
 	if r == nil {
 		config.G.Log.System.LogFatal("Could not initialize mapping for ElasticSearch.")
@@ -167,6 +178,7 @@ func (im *IndexManager) getAllLeafNodes() []string {
 		config.G.Log.System.LogError("Error querying ES.")
 	}
 
+	config.G.Log.System.LogDebug("Retrieved %v stat paths.", len(pathList))
 	return pathList
 }
 
