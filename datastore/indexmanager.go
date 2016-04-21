@@ -70,8 +70,9 @@ func (im *IndexManager) Init(bootstrap bool) {
 
 	// Initialize index worker queue.
 	im.IndexQueue = queue.NewQueue(func(metricPath interface{}) {
-		path, _ := metricPath.(string)
-		im.index(path)
+		if path, ok := metricPath.(string); ok {
+			im.index(path)
+		}
 	}, 100)
 }
 
