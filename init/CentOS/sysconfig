@@ -1,7 +1,7 @@
 # Settings for Cassabon
 
 # The unprivileged user to run as.
-USER=change
+USER=cassabon
 
 # Where the pid file should be written.
 PIDFILE=/var/run/cassabon.pid
