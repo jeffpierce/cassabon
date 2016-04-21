@@ -12,6 +12,8 @@ import (
 
 	"github.com/jeffpierce/cassabon/config"
 	"github.com/jeffpierce/cassabon/logging"
+
+	"github.com/otium/queue"
 )
 
 // IndexResponse defines the individual elements returned as an array by "GET /paths".
@@ -56,10 +58,21 @@ type ERQuery struct {
 }
 
 type IndexManager struct {
-	wg *sync.WaitGroup
+	wg         *sync.WaitGroup
+	IndexQueue *queue.Queue
 }
 
-func (im *IndexManager) Init() {
+func (im *IndexManager) Init(bootstrap bool) {
+	// If bootstrap is true, initialize mapping in ElasticSearch
+	if bootstrap {
+		im.initMapping()
+	}
+
+	// Initialize index worker queue.
+	im.IndexQueue = queue.NewQueue(func(metricPath interface{}) {
+		path, _ := metricPath.(string)
+		im.index(path)
+	}, 100)
 }
 
 func (im *IndexManager) Start(wg *sync.WaitGroup) {
@@ -80,11 +93,107 @@ func (im *IndexManager) run() {
 			im.wg.Done()
 			return
 		case metric := <-config.G.Channels.IndexStore:
-			go im.index(metric.Path)
+			im.IndexQueue.Push(metric.Path)
 		case query := <-config.G.Channels.IndexRequest:
 			go im.query(query)
 		}
 	}
+}
+
+// initMapping initializes ElasticSearch for cassabon.
+func (im *IndexManager) initMapping() {
+	mapping := map[string]map[string]map[string]map[string]map[string]string{
+		"mappings": map[string]map[string]map[string]map[string]string{
+			"path": map[string]map[string]map[string]string{
+				"properties": map[string]map[string]string{
+					"path": map[string]string{
+						"type":  "string",
+						"index": "not_analyzed",
+					},
+					"depth": map[string]string{
+						"type": "long",
+					},
+					"tenant": map[string]string{
+						"type": "string",
+					},
+					"leaf": map[string]string{
+						"type": "boolean",
+					},
+				},
+			},
+		},
+	}
+
+	jsonMap, _ := json.Marshal(mapping)
+	config.G.Log.System.LogDebug("%s", string(jsonMap))
+
+	putreq, _ := http.NewRequest("PUT", config.G.ElasticSearch.MapURL, bytes.NewBuffer(jsonMap))
+	r := im.httpRequest(putreq)
+
+	config.G.Log.System.LogDebug("%v", string(r))
+
+	if r == nil {
+		config.G.Log.System.LogFatal("Could not initialize mapping for ElasticSearch.")
+	}
+}
+
+// getAllLeafNodes queries ElasticSearch for all leaf nodes. Used for populating metric manager's stat paths on reboot.
+func (im *IndexManager) getAllLeafNodes() []string {
+	sort := []map[string]map[string]string{
+		{
+			"path": map[string]string{
+				"order": "asc",
+			},
+		},
+	}
+	query := map[string]map[string][]map[string]map[string]interface{}{
+		"bool": map[string][]map[string]map[string]interface{}{
+			"must": []map[string]map[string]interface{}{
+				{
+					"match": map[string]interface{}{
+						"leaf": true,
+					},
+				},
+			},
+		},
+	}
+
+	fullQuery := ERQuery{sort, query}
+	getreq := im.prepRequest(fullQuery)
+	r := im.httpRequest(getreq)
+
+	var esResp ElasticResponse
+	var pathList []string
+
+	if r != nil {
+		_ = json.Unmarshal(r, &esResp)
+
+		config.G.Log.System.LogDebug("esResp: %v", esResp)
+
+		for _, hit := range esResp.Hits.Hits {
+			pathList = append(pathList, hit.Source.Path)
+		}
+	} else {
+		logging.Statsd.Client.Inc("indexmgr.es.err.get", 1, 1.0)
+		config.G.Log.System.LogError("Error querying ES.")
+	}
+
+	config.G.Log.System.LogDebug("Retrieved %v stat paths.", len(pathList))
+	return pathList
+}
+
+func (im *IndexManager) prepRequest(fullQuery ERQuery) *http.Request {
+	jsonQuery, _ := json.Marshal(fullQuery)
+	config.G.Log.System.LogDebug("%s", string(jsonQuery))
+
+	// Get the count so that we capture all of the possible paths.
+	countreq, _ := http.NewRequest("GET", config.G.ElasticSearch.CountURL, strings.NewReader(string(jsonQuery)))
+	size := "size=" + im.getCount(countreq)
+
+	searchURL := strings.Join([]string{config.G.ElasticSearch.SearchURL, size}, "?")
+	getreq, _ := http.NewRequest("GET", searchURL, strings.NewReader(string(jsonQuery)))
+
+	return getreq
 }
 
 // IndexMetricPath takes a metric path string and sends it off to be processed by processMetricPath().
@@ -237,16 +346,7 @@ func (im *IndexManager) queryGET(q config.IndexQuery) {
 	}
 
 	fullQuery := ERQuery{sort, query}
-
-	jsonQuery, _ := json.Marshal(fullQuery)
-	config.G.Log.System.LogDebug("%s", string(jsonQuery))
-
-	// Get the count so that we capture all of the possible paths.
-	countreq, _ := http.NewRequest("GET", config.G.ElasticSearch.CountURL, strings.NewReader(string(jsonQuery)))
-	size := "size=" + im.getCount(countreq)
-
-	searchURL := strings.Join([]string{config.G.ElasticSearch.SearchURL, size}, "?")
-	getreq, _ := http.NewRequest("GET", searchURL, strings.NewReader(string(jsonQuery)))
+	getreq := im.prepRequest(fullQuery)
 	r := im.httpRequest(getreq)
 
 	if r != nil {
