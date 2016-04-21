@@ -73,6 +73,7 @@ type ElasticSearchSettings struct {
 	PutURL    string // URL for indexing paths
 	SearchURL string // URL for searching paths.
 	CountURL  string // URL for getting a count for the search path
+	MapURL    string // URL for ElasticSearch mapping.
 }
 
 type StatsdSettings struct {
@@ -129,7 +130,8 @@ func LoadStartupValues() {
 	if G.ElasticSearch.Index == "" {
 		G.ElasticSearch.Index = "cassabon"
 	}
-	G.ElasticSearch.PutURL = strings.Join([]string{G.ElasticSearch.BaseURL, G.ElasticSearch.Index, "path"}, "/")
+	G.ElasticSearch.MapURL = strings.Join([]string{G.ElasticSearch.BaseURL, G.ElasticSearch.Index}, "/")
+	G.ElasticSearch.PutURL = strings.Join([]string{G.ElasticSearch.MapURL, "path"}, "/")
 	G.ElasticSearch.SearchURL = strings.Join([]string{G.ElasticSearch.PutURL, "_search"}, "/")
 	G.ElasticSearch.CountURL = strings.Join([]string{G.ElasticSearch.SearchURL, "search_type=count"}, "?")
 

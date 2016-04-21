@@ -64,7 +64,7 @@ type MetricManager struct {
 	byExpr map[string]*runlist // Stats, by path within expression, for rollup processing
 }
 
-func (mm *MetricManager) Init() {
+func (mm *MetricManager) Init(bootstrap bool, im IndexManager) {
 
 	// Copy in the configuration (requires hard restart to refresh).
 	mm.rollupPriority = config.G.RollupPriority
@@ -74,6 +74,17 @@ func (mm *MetricManager) Init() {
 	mm.setTimeout = make(chan time.Duration, 0)
 	mm.timeout = make(chan struct{}, 1)
 	mm.insert = make(chan *gocql.Batch, 5000)
+
+	// Perform first-time initialization of rollup data accumulation structures.
+	mm.resetRollupData()
+
+	// Reinitialize maps from ES, if they exist.
+	if !bootstrap {
+		leafnodes := im.getAllLeafNodes()
+		for _, node := range leafnodes {
+			mm.addToMaps(node)
+		}
+	}
 }
 
 func (mm *MetricManager) Start(wg *sync.WaitGroup) {
@@ -124,7 +135,7 @@ func (mm *MetricManager) populateSchema() {
 			options = "," + config.G.Cassandra.CreateOpts
 		}
 		query := fmt.Sprintf(
-			"CREATE KEYSPACE %s WITH replication = {'class':'%s'%s}",
+			"CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class':'%s'%s}",
 			config.G.Cassandra.Keyspace, config.G.Cassandra.Strategy, options)
 		config.G.Log.System.LogDebug(query)
 		if err := mm.dbClient.Query(query).Exec(); err != nil {
@@ -233,9 +244,6 @@ func (mm *MetricManager) writer() {
 func (mm *MetricManager) run() {
 
 	defer config.G.OnPanic()
-
-	// Perform first-time initialization of rollup data accumulation structures.
-	mm.resetRollupData()
 
 	// Open connection to the Cassandra database here, so we can defer the close.
 	var err error

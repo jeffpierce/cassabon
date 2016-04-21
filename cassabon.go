@@ -22,7 +22,7 @@ func main() {
 
 	// The name of the YAML configuration file.
 	var confFile, loglevel string
-	var strict bool
+	var strict, bootstrap bool
 
 	// The WaitGroups for managing orderly goroutine reloads and termination.
 	var onReload1WG sync.WaitGroup // Wait on this if you receive external inputs
@@ -33,6 +33,7 @@ func main() {
 	flag.StringVar(&confFile, "conf", "config/cassabon.yaml", "Location of YAML configuration file")
 	flag.StringVar(&loglevel, "loglevel", "", "logging level, to override configuration until SIGHUP")
 	flag.BoolVar(&strict, "strict", true, "rollup configuration warnings are fatal")
+	flag.BoolVar(&bootstrap, "bootstrap", false, "performs bootstrap on ElasticSearch index.  Run only once.")
 	flag.Parse()
 
 	// Create the loggers.
@@ -114,8 +115,8 @@ func main() {
 	metricManager := new(datastore.MetricManager)
 	indexManager := new(datastore.IndexManager)
 	carbonListener := new(listener.CarbonPlaintextListener)
-	metricManager.Init()
-	indexManager.Init()
+	indexManager.Init(bootstrap)
+	metricManager.Init(bootstrap, *indexManager)
 	carbonListener.Init()
 
 	// MetricManager goroutines persist for the life of the app; start them now.

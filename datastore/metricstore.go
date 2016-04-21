@@ -42,6 +42,21 @@ func (mm *MetricManager) applyMethod(method config.RollupMethod, currentVal, new
 	return currentVal
 }
 
+// addToMaps adds a rollup into the mm.byPath and mm.byExpr maps.
+func (mm *MetricManager) addToMaps(metricPath string) *rollup {
+	var currentRollup *rollup
+
+	expr := mm.getExpression(metricPath)
+	currentRollup = new(rollup)
+	currentRollup.expr = expr
+	currentRollup.count = make([]uint64, len(mm.rollup[expr].Windows))
+	currentRollup.value = make([]float64, len(mm.rollup[expr].Windows))
+	mm.byPath[metricPath] = currentRollup
+	mm.byExpr[expr].path[metricPath] = currentRollup
+
+	return currentRollup
+}
+
 // accumulate records a metric according to the rollup definitions.
 func (mm *MetricManager) accumulate(metric config.CarbonMetric) {
 	config.G.Log.System.LogDebug("MetricManager::accumulate %s=%v", metric.Path, metric.Value)
@@ -52,13 +67,7 @@ func (mm *MetricManager) accumulate(metric config.CarbonMetric) {
 	if currentRollup, found = mm.byPath[metric.Path]; !found {
 
 		// Initialize, and insert the new rollup into both maps.
-		expr := mm.getExpression(metric.Path)
-		currentRollup = new(rollup)
-		currentRollup.expr = expr
-		currentRollup.count = make([]uint64, len(mm.rollup[expr].Windows))
-		currentRollup.value = make([]float64, len(mm.rollup[expr].Windows))
-		mm.byPath[metric.Path] = currentRollup
-		mm.byExpr[expr].path[metric.Path] = currentRollup
+		currentRollup = mm.addToMaps(metric.Path)
 
 		// Send the entry off for writing to the path index.
 		config.G.Channels.IndexStore <- metric
