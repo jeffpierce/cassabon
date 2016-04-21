@@ -1,6 +1,6 @@
 #!/bin/sh
 
-GROUP=change
+GROUP=cassabon
 
 # Application configuration
 #install --owner=root --group=root --mode=0644 cassabon.yaml /etc/cassabon.yaml
