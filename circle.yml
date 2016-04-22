@@ -10,6 +10,4 @@ dependencies:
 
 test:
   override:
-    - go version
-    - env | grep GO
     - make test
