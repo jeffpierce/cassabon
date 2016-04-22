@@ -3,6 +3,8 @@ dependencies:
     - rm -rf ~/.go_workspace/src/github.com/jeffpierce/cassabon
     - ln -sf ~/cassabon ~/.go_workspace/src/github.com/jeffpierce/cassabon
     - make clean build
+        environment:
+            GO15VENDOREXPERIMENT: 1
 
 test:
   override:
