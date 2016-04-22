@@ -5,7 +5,7 @@ TARGET = cassabon
 BUILDDIR = build
 
 SOURCES = $(TARGET).go api/*go config/*go datastore/*go listener/*go logging/*go middleware/*go
-TESTS = . ./api ./config ./datastore ./listener ./middleware ./pearson
+PACKAGES = . ./api ./config ./datastore ./listener ./middleware ./pearson
 
 VERSION = $(shell cat VERSION)
 
@@ -17,9 +17,12 @@ clean:
 fetch:
 	go get -t -d -v ./...
 
+vendorize:
+	godep save $(PACKAGES)
+
 # Logging currently shows a data race that only shows in testing, not in build or run.
 test:
-	go test -race $(TESTS)
+	go test -race $(PACKAGES)
 	go test ./logging
 
 config/version.go: VERSION
