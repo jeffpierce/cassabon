@@ -10,4 +10,4 @@ dependencies:
 
 test:
   override:
-    - make test
+    - cd ~/.go_workspace/src/github.com/jeffpierce/cassabon && make test
