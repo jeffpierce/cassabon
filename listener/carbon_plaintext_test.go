@@ -29,22 +29,35 @@ func TestCarbonSocket(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		fmt.Println("Sending good metric to TCP...")
-		tcpconn, _ := net.Dial("tcp", "127.0.0.1:2003")
-		GoodMetric(tcpconn)
-		tcpconn.Close()
+		if tcpconn, err := net.Dial("tcp", "127.0.0.1:2003"); err == nil {
+			GoodMetric(tcpconn)
+			tcpconn.Close()
+		} else {
+			fmt.Printf("Unable to open TCP connection: %s\n", err.Error())
+		}
 	}
 
 	fmt.Println("Sending bad metric to TCP...")
-	tcpconnbad, _ := net.Dial("tcp", "127.0.0.1:2003")
-	BadMetric(tcpconnbad)
+	if tcpconnbad, err := net.Dial("tcp", "127.0.0.1:2003"); err == nil {
+		BadMetric(tcpconnbad)
+		tcpconnbad.Close()
+	} else {
+		fmt.Printf("Unable to open TCP connection: %s\n", err.Error())
+	}
 
 	fmt.Println("Sending good metric to UDP...")
-	udpconn, _ := net.Dial("udp", "127.0.0.1:2003")
-	GoodMetric(udpconn)
+	if udpconn, err := net.Dial("udp", "127.0.0.1:2003"); err == nil {
+		GoodMetric(udpconn)
+	} else {
+		fmt.Printf("Unable to open UDP connection: %s\n", err.Error())
+	}
 
 	fmt.Println("Sending bad metric to UDP...")
-	udpconnbad, _ := net.Dial("udp", "127.0.0.1:2003")
-	BadMetric(udpconnbad)
+	if udpconnbad, err := net.Dial("udp", "127.0.0.1:2003"); err == nil {
+		BadMetric(udpconnbad)
+	} else {
+		fmt.Printf("Unable to open UDP connection: %s\n", err.Error())
+	}
 
 	time.Sleep(100 * time.Millisecond)
 }
