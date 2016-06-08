@@ -5,10 +5,10 @@ machine:
 dependencies:
   override:
     - rm -rf ~/.go_workspace/src/github.com/jeffpierce/cassabon
-    #- ln -sf ~/cassabon ~/.go_workspace/src/github.com/jeffpierce/cassabon
+    - mkdir -p ~/.go_workspace/src/github.com/jeffpierce
+    - ln -sf ~/cassabon ~/.go_workspace/src/github.com/jeffpierce/cassabon
     - make clean build
 
 test:
   override:
-    #- cd ~/.go_workspace/src/github.com/jeffpierce/cassabon && make test
-    - make test
+    - cd ~/.go_workspace/src/github.com/jeffpierce/cassabon && make test
