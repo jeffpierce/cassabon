@@ -15,6 +15,7 @@ config/healthcheckfile
 # Build artifacts
 config/version.go
 devtools/echostats
+devtools/pathdistribution
 devtools/stresstest
 
 # Architecture specific extensions/prefixes

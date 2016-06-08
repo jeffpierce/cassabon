@@ -1,6 +1,6 @@
 # Makefile for the stresstest executable.
 
-SRCS = stresstest.go echostats.go
+SRCS = echostats.go pathdistribution.go stresstest.go
 
 TARGETS = $(patsubst %.go,%,$(SRCS))
 
