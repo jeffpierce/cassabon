@@ -5,7 +5,7 @@ machine:
 dependencies:
   override:
     - rm -rf ~/.go_workspace/src/github.com/jeffpierce/cassabon
-    - ln -sf ~/cassabon ~/.go_workspace/src/github.com/jeffpierce/cassabon
+    #- ln -sf ~/cassabon ~/.go_workspace/src/github.com/jeffpierce/cassabon
     - make clean build
 
 test:
